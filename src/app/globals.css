@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  --color-maroon-50: #fdf2f4;
+  --color-maroon-100: #fbe6e9;
+  --color-maroon-200: #f7ced6;
+  --color-maroon-300: #f0a7b6;
+  --color-maroon-400: #e5748d;
+  --color-maroon-500: #d64768;
+  --color-maroon-600: #ba284c;
+  --color-maroon-700: #8a1538;
+  --color-maroon-800: #7e1634;
+  --color-maroon-900: #6b162f;
+  --color-maroon-950: #3e0716;
+
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #e5a919;
+  --color-gold-600: #ca8a04;
+
+  --color-whatsapp: #25d366;
+  --color-whatsapp-hover: #20ba59;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --primary-maroon: #8a1538;
+  --primary-maroon-dark: #6e132d;
+  --accent-gold: #e5a919;
+  --neutral-soft: #f8f9fa;
+  --border-subtle: #eaeaea;
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+  position: relative;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom modern thin scrollbar for sticky filter sidebar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #8a1538;
+}
+
+/* Custom utility for no-scrollbar horizontal category scroll */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Smooth transitions */
+button, a {
+  transition: all 0.15s ease-in-out;
+}
+
+/* Custom Price Range Slider */
+input[type="range"].range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  outline: none;
+}
+input[type="range"].range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #8a1538;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(138, 21, 56, 0.4);
+  border: 2px solid #ffffff;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+input[type="range"].range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 3px 8px rgba(138, 21, 56, 0.55);
+}
+input[type="range"].range-slider::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+input[type="range"].range-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #8a1538;
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 5px rgba(138, 21, 56, 0.4);
+  transition: transform 0.1s ease;
+}
