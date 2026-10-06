@@ -85,7 +85,7 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
   };
 }
 
-export const revalidate = 60;
+export const revalidate = 86400; // 24 hours (prevents ISR write spikes under Meta ad traffic)
 
 export default async function CategoryDetailPage({ params }: CategoryPageProps) {
   const { slug } = await params;

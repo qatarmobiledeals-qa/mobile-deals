@@ -19,8 +19,9 @@ import { TrustBar } from "@/components/store/trust-bar";
 import { Footer } from "@/components/store/footer";
 import { MobileBottomNav } from "@/components/store/mobile-bottom-nav";
 
-// Dynamic rendering ensures fresh data while avoiding client-side waterfalls
-export const revalidate = 60; // ISR cache 60 seconds
+// Cached for 24 hours to prevent Vercel ISR write limit exhaustion during ad campaigns.
+// Updates occur automatically on admin changes via on-demand revalidatePath.
+export const revalidate = 86400; // 24 hours
 
 export const metadata: Metadata = {
   alternates: {

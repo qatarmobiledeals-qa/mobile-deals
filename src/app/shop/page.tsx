@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 60; // ISR cache 60 seconds
+export const revalidate = 86400; // 24 hours (prevents ISR write spikes under Meta ad traffic)
 
 export default async function ShopPage() {
   const [products, categories, brands, settings] = await Promise.all([

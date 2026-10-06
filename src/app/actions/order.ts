@@ -159,7 +159,6 @@ export async function createCodOrder(data: CreateOrderInput): Promise<{
     try {
       revalidatePath("/admin");
       revalidatePath("/admin/orders");
-      revalidatePath("/");
     } catch (e) {
       console.warn("[OrderAction] Cache revalidation skipped:", e);
     }

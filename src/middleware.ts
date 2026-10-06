@@ -30,8 +30,8 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 3. Regular Supabase session updater for store routes
-  return await updateSession(request);
+  // 3. Public store routes bypass session checks to save Fluid CPU & avoid network overhead
+  return NextResponse.next();
 }
 
 export const config = {

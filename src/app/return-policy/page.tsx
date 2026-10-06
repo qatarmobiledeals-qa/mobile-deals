@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 60;
+export const revalidate = 86400; // 24 hours
 
 export default async function ReturnPolicyPage() {
   const [settings, categories] = await Promise.all([
