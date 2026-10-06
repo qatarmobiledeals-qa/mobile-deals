@@ -24,7 +24,11 @@ export const revalidate = 86400; // 24 hours (protects Vercel CPU & Supabase fro
 export async function generateStaticParams() {
   try {
     const products = await getAllProducts();
-    return products.map((p) => ({ slug: p.slug }));
+    // Linux filesystem NAME_MAX is 255 bytes. Suffix .rsc.prerender-config.json is 27 bytes.
+    // Filter slugs to <= 120 chars so Vercel Linux builds will never throw ENAMETOOLONG.
+    return products
+      .filter((p) => p.slug && p.slug.length <= 120)
+      .map((p) => ({ slug: p.slug }));
   } catch {
     return [];
   }

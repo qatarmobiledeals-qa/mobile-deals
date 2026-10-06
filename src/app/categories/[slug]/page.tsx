@@ -19,7 +19,9 @@ interface CategoryPageProps {
 export async function generateStaticParams() {
   try {
     const categories = await getCategories();
-    return categories.map((cat) => ({ slug: cat.slug }));
+    return categories
+      .filter((cat) => cat.slug && cat.slug.length <= 120)
+      .map((cat) => ({ slug: cat.slug }));
   } catch {
     return [];
   }
