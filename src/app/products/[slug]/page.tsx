@@ -2,7 +2,7 @@ import React from "react";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProductBySlug, getSiteSettings } from "@/lib/data";
+import { getProductBySlug, getSiteSettings, getAllProducts } from "@/lib/data";
 import { AnnouncementBar } from "@/components/store/announcement-bar";
 import { MainNavbar } from "@/components/store/main-navbar";
 import { ProductGallery } from "@/components/store/product-gallery";
@@ -17,6 +17,17 @@ interface ProductPageProps {
   params: Promise<{
     slug: string;
   }>;
+}
+
+export const revalidate = 86400; // 24 hours (protects Vercel CPU & Supabase from Meta Ads traffic spikes)
+
+export async function generateStaticParams() {
+  try {
+    const products = await getAllProducts();
+    return products.map((p) => ({ slug: p.slug }));
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({
