@@ -110,6 +110,7 @@ export async function createProductAction(data: ProductInputPayload) {
     }
 
     revalidatePath("/");
+    revalidatePath("/shop");
     revalidatePath("/admin");
     revalidatePath("/admin/products");
 
@@ -224,6 +225,7 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
     }
 
     revalidatePath("/");
+    revalidatePath("/shop");
     revalidatePath(`/products/${data.slug || id}`);
     revalidatePath("/admin");
     revalidatePath("/admin/products");
@@ -288,6 +290,7 @@ export async function deleteProductAction(id: string) {
     if (error) throw error;
 
     revalidatePath("/");
+    revalidatePath("/shop");
     revalidatePath("/admin");
     revalidatePath("/admin/products");
     return { success: true };
@@ -306,6 +309,7 @@ export async function toggleProductActiveAction(id: string, currentStatus: boole
     if (error) throw error;
 
     revalidatePath("/");
+    revalidatePath("/shop");
     revalidatePath("/admin/products");
     return { success: true };
   } catch (err: unknown) {
@@ -431,6 +435,7 @@ export async function createCategoryAction(data: {
     if (error) throw error;
 
     revalidatePath("/");
+    revalidatePath("/shop");
     revalidatePath("/categories");
     revalidatePath("/admin/categories");
     return { success: true };
@@ -460,6 +465,7 @@ export async function updateCategoryAction(
     if (error) throw error;
 
     revalidatePath("/");
+    revalidatePath("/shop");
     revalidatePath("/categories");
     revalidatePath("/admin/categories");
     return { success: true };
@@ -491,6 +497,7 @@ export async function deleteCategoryAction(id: string) {
     if (error) throw error;
 
     revalidatePath("/");
+    revalidatePath("/shop");
     revalidatePath("/categories");
     revalidatePath("/admin/categories");
     return { success: true };
