@@ -338,7 +338,10 @@ export function ProductForm({
         name: v.name.trim(),
         sku: v.sku.trim() || undefined,
         price: v.price ? Number(v.price) : undefined,
-        stock: v.stock ? Number(v.stock) : 5,
+        stock:
+          v.stock !== undefined && v.stock !== "" && !isNaN(Number(v.stock))
+            ? Number(v.stock)
+            : 0,
       }));
 
       // Build finalSpecifications from specRows (user-defined) + internal gift keys

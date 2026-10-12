@@ -15,6 +15,7 @@ import {
   Minus,
   Plus,
   Check,
+  AlertCircle,
 } from "lucide-react";
 import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 
@@ -34,10 +35,22 @@ export function ProductDetailsClient({
 
   const variants = product.product_variants || [];
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
-    variants.length > 0 ? variants[0] : null
+    () => {
+      if (variants.length === 0) return null;
+      // Default to the first in-stock variant if available
+      const firstInStock = variants.find((v) => (v.stock ?? 0) > 0);
+      return firstInStock || variants[0];
+    }
   );
   const [quantity, setQuantity] = useState(1);
   const [addedToast, setAddedToast] = useState(false);
+
+  // Stock calculations for currently selected variant or main product
+  const currentStock = selectedVariant
+    ? (selectedVariant.stock ?? 0)
+    : (product.stock ?? 0);
+  const isOutOfStock = currentStock <= 0;
+  const isLowStock = currentStock > 0 && currentStock <= 5;
 
   const currentPrice = selectedVariant?.price ?? product.price;
   const comparePrice = selectedVariant?.compare_at_price ?? product.compare_at_price;
@@ -59,6 +72,7 @@ export function ProductDetailsClient({
     Boolean(giftName || giftImage);
 
   const handleAddToCart = () => {
+    if (isOutOfStock) return;
     addItem(
       {
         productId: product.id,
@@ -76,6 +90,7 @@ export function ProductDetailsClient({
   };
 
   const handleBuyWithCOD = () => {
+    if (isOutOfStock) return;
     const directItem = {
       productId: product.id,
       productName: product.name,
@@ -94,14 +109,20 @@ export function ProductDetailsClient({
     router.push("/checkout?direct=1");
   };
 
-  const whatsAppUrl = generateProductWhatsAppUrl({
-    storeNumber: whatsappNumber,
-    productName: product.name,
-    variantName: selectedVariant?.name,
-    price: currentPrice,
-    quantity: quantity,
-    currency: currency,
-  });
+  const whatsAppUrl = isOutOfStock
+    ? `https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(
+        `Hi Mobile Deals Qatar, I would like to enquire about stock availability for ${product.name}${
+          selectedVariant?.name ? ` (${selectedVariant.name})` : ""
+        }. When will this item be back in stock?`
+      )}`
+    : generateProductWhatsAppUrl({
+        storeNumber: whatsappNumber,
+        productName: product.name,
+        variantName: selectedVariant?.name,
+        price: currentPrice,
+        quantity: quantity,
+        currency: currency,
+      });
 
   return (
     <div className="flex flex-col gap-5 w-full min-w-0 max-w-full">
@@ -137,44 +158,94 @@ export function ProductDetailsClient({
         )}
       </div>
 
-      {/* ── Pricing block ── */}
-      <div className="flex items-center gap-3 flex-wrap p-4 rounded-2xl bg-neutral-50 border border-neutral-200/60">
-        <span className="text-3xl sm:text-4xl font-black text-[#8A1538] tracking-tight">
-          {currency} {currentPrice.toLocaleString()}
-        </span>
-        {hasDiscount && (
-          <>
-            <span className="text-base text-neutral-400 line-through">
-              {currency} {comparePrice.toLocaleString()}
+      {/* ── Pricing & Stock block ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-neutral-50 border border-neutral-200/60">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-3xl sm:text-4xl font-black text-[#8A1538] tracking-tight">
+            {currency} {currentPrice.toLocaleString()}
+          </span>
+          {hasDiscount && (
+            <>
+              <span className="text-base text-neutral-400 line-through">
+                {currency} {comparePrice.toLocaleString()}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
+                Save {discountPercent}%
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Dynamic stock status */}
+        <div className="shrink-0">
+          {isOutOfStock ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span>Out of Stock</span>
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
-              Save {discountPercent}%
+          ) : isLowStock ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <span>Only {currentStock} left in stock</span>
             </span>
-          </>
-        )}
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>In Stock</span>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Variant selector ── */}
       {variants.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-bold uppercase text-neutral-500 tracking-wider">
-            Select Model / Variant
-          </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase text-neutral-500 tracking-wider">
+              Select Model / Variant
+            </p>
+            {selectedVariant && (
+              <span className="text-xs text-neutral-500">
+                Selected: <strong className="text-neutral-900">{selectedVariant.name}</strong>
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2.5">
             {variants.map((variant) => {
               const isSelected = selectedVariant?.id === variant.id;
+              const isVarOutOfStock = (variant.stock ?? 0) <= 0;
               return (
                 <button
                   key={variant.id}
                   type="button"
-                  onClick={() => setSelectedVariant(variant)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                  onClick={() => {
+                    setSelectedVariant(variant);
+                    setQuantity(1);
+                  }}
+                  className={`relative px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-2 cursor-pointer ${
                     isSelected
-                      ? "border-[#8A1538] bg-[#8A1538]/5 text-[#8A1538] ring-2 ring-[#8A1538]/20"
-                      : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400"
+                      ? isVarOutOfStock
+                        ? "border-rose-400 bg-rose-50/80 text-rose-800 ring-2 ring-rose-300/40"
+                        : "border-[#8A1538] bg-[#8A1538]/5 text-[#8A1538] ring-2 ring-[#8A1538]/20"
+                      : isVarOutOfStock
+                      ? "border-neutral-200 bg-neutral-100/90 text-neutral-400 hover:border-neutral-300"
+                      : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50"
                   }`}
                 >
-                  {variant.name}
+                  <span className={isVarOutOfStock ? "line-through opacity-75" : ""}>
+                    {variant.name}
+                  </span>
+                  {isVarOutOfStock ? (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">
+                      Out of Stock
+                    </span>
+                  ) : (
+                    (variant.stock ?? 0) <= 5 && (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                        {variant.stock} left
+                      </span>
+                    )
+                  )}
                 </button>
               );
             })}
@@ -184,25 +255,36 @@ export function ProductDetailsClient({
 
       {/* ── Quantity + Add to Cart — same row ── */}
       <div className="space-y-2 w-full">
-        <span className="text-xs font-bold uppercase text-neutral-500 tracking-wider">Quantity</span>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase text-neutral-500 tracking-wider">Quantity</span>
+          {isOutOfStock ? (
+            <span className="text-xs font-bold text-rose-600">Currently unavailable</span>
+          ) : isLowStock ? (
+            <span className="text-xs font-semibold text-amber-700">Max available: {currentStock}</span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2.5 sm:gap-3 w-full">
           {/* Stepper */}
-          <div className="flex items-center border border-neutral-200 rounded-xl bg-white overflow-hidden shadow-xs shrink-0">
+          <div className={`flex items-center border border-neutral-200 rounded-xl bg-white overflow-hidden shadow-xs shrink-0 ${
+            isOutOfStock ? "opacity-50 pointer-events-none" : ""
+          }`}>
             <button
               type="button"
+              disabled={isOutOfStock || quantity <= 1}
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="px-2.5 sm:px-3 py-2.5 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer"
+              className="px-2.5 sm:px-3 py-2.5 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label="Decrease quantity"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
             <span className="w-8 sm:w-10 text-center font-bold text-sm text-neutral-900">
-              {quantity}
+              {isOutOfStock ? 0 : quantity}
             </span>
             <button
               type="button"
-              onClick={() => setQuantity((q) => q + 1)}
-              className="px-2.5 sm:px-3 py-2.5 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer"
+              disabled={isOutOfStock || quantity >= currentStock}
+              onClick={() => setQuantity((q) => Math.min(currentStock, q + 1))}
+              className="px-2.5 sm:px-3 py-2.5 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label="Increase quantity"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -212,10 +294,22 @@ export function ProductDetailsClient({
           {/* Add to Cart */}
           <button
             type="button"
+            disabled={isOutOfStock}
             onClick={handleAddToCart}
-            className="flex-1 sm:flex-initial py-2.5 px-4 sm:px-6 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-sm hover:shadow-md bg-[#8A1538] hover:bg-[#700f2c] text-white cursor-pointer"
+            className={`flex-1 sm:flex-initial py-3 px-4 sm:px-6 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm ${
+              isOutOfStock
+                ? "bg-neutral-200 text-neutral-400 cursor-not-allowed border border-neutral-300 shadow-none"
+                : addedToast
+                ? "bg-emerald-700 text-white cursor-pointer"
+                : "bg-[#8A1538] hover:bg-[#700f2c] text-white active:scale-[0.99] hover:shadow-md cursor-pointer"
+            }`}
           >
-            {addedToast ? (
+            {isOutOfStock ? (
+              <>
+                <AlertCircle className="w-4 h-4 text-neutral-400" />
+                <span>Out of Stock</span>
+              </>
+            ) : addedToast ? (
               <>
                 <Check className="w-4 h-4 text-emerald-200" />
                 <span>Added to Cart!</span>
@@ -234,20 +328,29 @@ export function ProductDetailsClient({
       <div className="grid grid-cols-2 gap-2.5">
         <button
           type="button"
+          disabled={isOutOfStock}
           onClick={handleBuyWithCOD}
-          className="py-3.5 px-3 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center shadow-sm hover:shadow-md transition-all active:scale-[0.99]"
+          className={`py-3.5 px-3 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center shadow-sm transition-all ${
+            isOutOfStock
+              ? "bg-neutral-200 text-neutral-400 cursor-not-allowed border border-neutral-300 shadow-none"
+              : "bg-neutral-900 hover:bg-neutral-800 text-white hover:shadow-md active:scale-[0.99] cursor-pointer"
+          }`}
         >
-          <span>Cash on Delivery</span>
+          <span>{isOutOfStock ? "Out of Stock" : "Cash on Delivery"}</span>
         </button>
 
         <a
           href={whatsAppUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="py-3.5 px-3 rounded-2xl bg-[#25D366] hover:bg-[#1fb855] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.99]"
+          className={`py-3.5 px-3 rounded-2xl text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.99] ${
+            isOutOfStock
+              ? "bg-emerald-600 hover:bg-emerald-700"
+              : "bg-[#25D366] hover:bg-[#1fb855]"
+          }`}
         >
           <WhatsAppIcon className="w-4 h-4 fill-white shrink-0" />
-          <span>Order via WhatsApp</span>
+          <span>{isOutOfStock ? "Enquire on WhatsApp" : "Order via WhatsApp"}</span>
         </a>
       </div>
 

@@ -103,7 +103,7 @@ export async function createProductAction(data: ProductInputPayload) {
         sku: v.sku || null,
         price: v.price || null,
         compare_at_price: v.compare_at_price || null,
-        stock: v.stock ?? 5,
+        stock: v.stock !== undefined && v.stock !== null ? Number(v.stock) : 0,
       }));
       const { error: varErr } = await supabase.from("product_variants").insert(variantsToInsert);
       if (varErr) throw varErr;
@@ -217,18 +217,12 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
           sku: v.sku || null,
           price: v.price || null,
           compare_at_price: v.compare_at_price || null,
-          stock: v.stock ?? 5,
+          stock: v.stock !== undefined && v.stock !== null ? Number(v.stock) : 0,
         }));
         const { error: insVarErr } = await supabase.from("product_variants").insert(variantsToInsert);
         if (insVarErr) throw insVarErr;
       }
     }
-
-    revalidatePath("/");
-    revalidatePath("/shop");
-    revalidatePath(`/products/${data.slug || id}`);
-    revalidatePath("/admin");
-    revalidatePath("/admin/products");
 
     // Fetch refreshed product with relations
     const { data: updatedProduct } = await supabase
@@ -236,6 +230,16 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
       .select("*, category:categories(*), brand:brands(*), product_images(*), product_variants(*)")
       .eq("id", id)
       .single();
+
+    revalidatePath("/");
+    revalidatePath("/shop");
+    if (updatedProduct?.slug) {
+      revalidatePath(`/products/${updatedProduct.slug}`);
+    } else if (data.slug) {
+      revalidatePath(`/products/${data.slug}`);
+    }
+    revalidatePath("/admin");
+    revalidatePath("/admin/products");
 
     return { success: true, data: updatedProduct };
   } catch (err: unknown) {
