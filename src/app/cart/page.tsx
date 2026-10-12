@@ -210,12 +210,6 @@ export default function CartPage() {
                   <span className="font-bold text-neutral-900 font-mono">QAR {subtotal.toLocaleString()}</span>
                 </div>
 
-                <div className="flex items-center justify-between pt-3">
-                  <span className="text-neutral-500">Delivery Fee Across Qatar</span>
-                  <span className={`font-bold ${deliveryFee === 0 ? "text-emerald-600" : "text-neutral-900 font-mono"}`}>
-                    {deliveryFee === 0 ? "FREE" : `QAR ${deliveryFee.toLocaleString()}`}
-                  </span>
-                </div>
 
                 <div className="flex items-center justify-between pt-3 text-base sm:text-lg">
                   <span className="font-bold text-neutral-900">Total</span>
