@@ -76,6 +76,26 @@ export function OrderReceiptModal({ order }: { order: Order }) {
 
             {/* Printable Container */}
             <div className="p-6 overflow-y-auto max-h-[70vh] bg-neutral-950/50 flex justify-center">
+              <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                  body * {
+                    visibility: hidden !important;
+                  }
+                  #printable-receipt, #printable-receipt * {
+                    visibility: visible !important;
+                  }
+                  #printable-receipt {
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    margin: 0 !important;
+                    padding: 12px !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                  }
+                }
+              `}} />
               <div
                 id="printable-receipt"
                 className={`bg-white text-neutral-900 p-6 shadow-xl rounded-xl font-sans ${
@@ -87,8 +107,11 @@ export function OrderReceiptModal({ order }: { order: Order }) {
                   <h2 className="text-base font-black tracking-tight text-[#8A1538]">
                     MOBILE DEALS QATAR
                   </h2>
-                  <p className="text-[10px] text-neutral-600">
-                    Doha, Qatar &bull; Tel: +974 5500 0000
+                  <p className="text-[10px] text-neutral-700 font-semibold uppercase leading-tight">
+                    AL BALADI ALYAWM, DUHAIL DOHA, QATAR
+                  </p>
+                  <p className="text-[10px] text-neutral-600 font-medium">
+                    Tel: +974 3362 6937
                   </p>
                   <p className="text-[10px] text-neutral-500 font-mono">
                     Cash on Delivery (COD) Invoice
@@ -153,12 +176,14 @@ export function OrderReceiptModal({ order }: { order: Order }) {
                     <span>Subtotal:</span>
                     <span>QAR {Number(order.subtotal).toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between text-neutral-600">
-                    <span>Qatar Delivery:</span>
-                    <span className={Number(order.delivery_fee) === 0 ? "text-emerald-700 font-bold" : "font-mono font-bold text-neutral-900"}>
-                      {Number(order.delivery_fee) === 0 ? "FREE" : `QAR ${Number(order.delivery_fee).toLocaleString()}`}
-                    </span>
-                  </div>
+                  {Number(order.delivery_fee) > 0 && (
+                    <div className="flex justify-between text-neutral-600">
+                      <span>Delivery:</span>
+                      <span className="font-mono font-bold text-neutral-900">
+                        QAR {Number(order.delivery_fee).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm font-black text-neutral-900 pt-1 border-t border-neutral-200">
                     <span>Total Payable (COD):</span>
                     <span className="text-[#8A1538]">QAR {Number(order.total).toLocaleString()}</span>
@@ -168,7 +193,7 @@ export function OrderReceiptModal({ order }: { order: Order }) {
                 {/* Footer */}
                 <div className="pt-3 text-center text-[10px] text-neutral-500 space-y-0.5">
                   <p className="font-semibold">Thank you for shopping with Mobile Deals!</p>
-                  <p>For warranty or exchange inquiries: +974 5500 0000</p>
+                  <p>For warranty or exchange inquiries: +974 3362 6937</p>
                 </div>
               </div>
             </div>
