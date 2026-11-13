@@ -9,8 +9,10 @@ export type Json =
 export interface Category {
   id: string;
   name: string;
+  name_ar?: string | null;
   slug: string;
   description: string | null;
+  description_ar?: string | null;
   image_url: string | null;
   icon_name: string | null;
   display_order: number;
@@ -32,6 +34,7 @@ export interface ProductVariant {
   id: string;
   product_id: string;
   name: string;
+  name_ar?: string | null;
   sku: string | null;
   price: number | null;
   compare_at_price: number | null;
@@ -46,25 +49,41 @@ export interface ProductImage {
   cloudinary_public_id: string | null;
   image_url: string;
   alt_text: string | null;
+  alt_text_ar?: string | null;
   display_order: number;
   is_primary: boolean;
   created_at: string;
 }
 
+export interface TranslationFieldMetadata {
+  source?: "manual" | "ai";
+  reviewed?: boolean;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export type TranslationMetadata = Record<string, TranslationFieldMetadata>;
+
 export interface Product {
   id: string;
   name: string;
+  name_ar?: string | null;
   slug: string;
   brand_id: string | null;
   category_id: string | null;
   short_description: string | null;
+  short_description_ar?: string | null;
   description: string | null;
+  description_ar?: string | null;
   price: number;
   compare_at_price: number | null;
   stock: number;
   warranty: string | null;
+  warranty_ar?: string | null;
   free_gift: string | null;
+  free_gift_ar?: string | null;
   badge_text: string | null;
+  badge_text_ar?: string | null;
   is_featured: boolean;
   is_best_deal: boolean;
   is_today_deal: boolean;
@@ -72,9 +91,14 @@ export interface Product {
   is_new_arrival: boolean;
   deal_ends_at: string | null;
   specifications: Record<string, string>;
+  specifications_ar?: Record<string, string> | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // Arabic translation tracking
+  is_arabic_reviewed?: boolean;
+  arabic_updated_at?: string | null;
+  translation_metadata?: TranslationMetadata | null;
   // Joins
   brand?: Brand | null;
   category?: Category | null;
@@ -85,11 +109,16 @@ export interface Product {
 export interface Banner {
   id: string;
   title: string | null;
+  title_ar?: string | null;
   highlighted_text: string | null;
+  highlighted_text_ar?: string | null;
   description: string | null;
+  description_ar?: string | null;
   primary_cta_text: string | null;
+  primary_cta_text_ar?: string | null;
   primary_cta_link: string | null;
   secondary_cta_text: string | null;
+  secondary_cta_text_ar?: string | null;
   secondary_cta_link: string | null;
   desktop_image_url: string;
   mobile_image_url: string | null;
@@ -137,20 +166,25 @@ export interface Order {
 
 export interface SiteSettings {
   store_name: string;
+  store_name_ar?: string | null;
   whatsapp_number: string;
   support_phone: string;
   store_email: string;
   currency: string;
+  currency_ar?: string | null;
   shipping_charge?: number;
   free_delivery_threshold?: number;
   announcement_bar?: {
     enabled: boolean;
     items: string[];
+    items_ar?: string[];
   };
   trust_badges?: {
     items: Array<{
       title: string;
+      title_ar?: string | null;
       subtitle?: string;
+      subtitle_ar?: string | null;
       icon: string;
     }>;
   };

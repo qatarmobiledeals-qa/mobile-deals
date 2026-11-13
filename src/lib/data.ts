@@ -38,7 +38,7 @@ export async function getCategories(): Promise<Category[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("categories")
-      .select("id, name, slug, description, image_url, icon_name, display_order, is_active")
+      .select("id, name, name_ar, slug, description, description_ar, image_url, icon_name, display_order, is_active")
       .eq("is_active", true)
       .order("display_order", { ascending: true });
 
@@ -62,7 +62,7 @@ export async function getBanners(): Promise<Banner[]> {
     const { data, error } = await supabase
       .from("banners")
       .select(
-        "id, title, highlighted_text, description, primary_cta_text, primary_cta_link, secondary_cta_text, secondary_cta_link, desktop_image_url, mobile_image_url, cloudinary_public_id, position, display_order, is_active"
+        "id, title, title_ar, highlighted_text, highlighted_text_ar, description, description_ar, primary_cta_text, primary_cta_text_ar, primary_cta_link, secondary_cta_text, secondary_cta_text_ar, secondary_cta_link, desktop_image_url, mobile_image_url, cloudinary_public_id, position, display_order, is_active"
       )
       .eq("is_active", true)
       .order("display_order", { ascending: true });
@@ -89,11 +89,11 @@ export async function getTodayDeals(): Promise<Product[]> {
       .from("products")
       .select(
         `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
+        id, name, name_ar, slug, short_description, short_description_ar, description_ar, price, compare_at_price, stock,
+        warranty, warranty_ar, free_gift, free_gift_ar, badge_text, badge_text_ar, is_featured, is_best_deal, is_today_deal,
+        is_best_seller, deal_ends_at, is_active, specifications, specifications_ar,
         product_images (
-          id, image_url, alt_text, is_primary, display_order
+          id, image_url, alt_text, alt_text_ar, is_primary, display_order
         )
       `
       )
@@ -123,11 +123,11 @@ export async function getFeaturedProducts(): Promise<Product[]> {
       .from("products")
       .select(
         `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
+        id, name, name_ar, slug, short_description, short_description_ar, description_ar, price, compare_at_price, stock,
+        warranty, warranty_ar, free_gift, free_gift_ar, badge_text, badge_text_ar, is_featured, is_best_deal, is_today_deal,
+        is_best_seller, deal_ends_at, is_active, specifications, specifications_ar,
         product_images (
-          id, image_url, alt_text, is_primary, display_order
+          id, image_url, alt_text, alt_text_ar, is_primary, display_order
         )
       `
       )
@@ -157,11 +157,11 @@ export async function getBestDeals(): Promise<Product[]> {
       .from("products")
       .select(
         `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
+        id, name, name_ar, slug, short_description, short_description_ar, description_ar, price, compare_at_price, stock,
+        warranty, warranty_ar, free_gift, free_gift_ar, badge_text, badge_text_ar, is_featured, is_best_deal, is_today_deal,
+        is_best_seller, deal_ends_at, is_active, specifications, specifications_ar,
         product_images (
-          id, image_url, alt_text, is_primary, display_order
+          id, image_url, alt_text, alt_text_ar, is_primary, display_order
         )
       `
       )
@@ -214,14 +214,14 @@ export async function getAllProducts(): Promise<Product[]> {
       .from("products")
       .select(
         `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, is_new_arrival, deal_ends_at, is_active, specifications,
+        id, name, name_ar, slug, short_description, short_description_ar, description_ar, price, compare_at_price, stock,
+        warranty, warranty_ar, free_gift, free_gift_ar, badge_text, badge_text_ar, is_featured, is_best_deal, is_today_deal,
+        is_best_seller, is_new_arrival, deal_ends_at, is_active, specifications, specifications_ar,
         category_id, brand_id,
-        category:categories (id, name, slug),
+        category:categories (id, name, name_ar, slug),
         brand:brands (id, name, slug),
         product_images (
-          id, image_url, alt_text, is_primary, display_order
+          id, image_url, alt_text, alt_text_ar, is_primary, display_order
         )
       `
       )
@@ -297,11 +297,11 @@ export async function getProductsByCategory(categorySlug: string): Promise<{
       .from("products")
       .select(
         `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
+        id, name, name_ar, slug, short_description, short_description_ar, description_ar, price, compare_at_price, stock,
+        warranty, warranty_ar, free_gift, free_gift_ar, badge_text, badge_text_ar, is_featured, is_best_deal, is_today_deal,
+        is_best_seller, deal_ends_at, is_active, specifications, specifications_ar,
         product_images (
-          id, image_url, alt_text, is_primary, display_order
+          id, image_url, alt_text, alt_text_ar, is_primary, display_order
         )
       `
       )
@@ -334,13 +334,13 @@ export async function searchProducts(query: string): Promise<Product[]> {
       .from("products")
       .select(
         `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, is_new_arrival, is_active, specifications,
-        category:categories (id, name, slug),
+        id, name, name_ar, slug, short_description, short_description_ar, description_ar, price, compare_at_price, stock,
+        warranty, warranty_ar, free_gift, free_gift_ar, badge_text, badge_text_ar, is_featured, is_best_deal, is_today_deal,
+        is_best_seller, is_new_arrival, is_active, specifications, specifications_ar,
+        category:categories (id, name, name_ar, slug),
         brand:brands (id, name, slug),
         product_images (
-          id, image_url, alt_text, is_primary, display_order
+          id, image_url, alt_text, alt_text_ar, is_primary, display_order
         )
       `
       )
