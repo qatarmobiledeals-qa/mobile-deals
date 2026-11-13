@@ -10,6 +10,7 @@ interface ImageUploaderProps {
   onChange: (url: string, publicId?: string | null) => void;
   folder?: string;
   label?: string;
+  compress?: boolean;
 }
 
 export function ImageUploader({
@@ -17,6 +18,7 @@ export function ImageUploader({
   onChange,
   folder = "mobile-deals/products",
   label = "Upload Image to Cloudinary",
+  compress = true,
 }: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [compressionInfo, setCompressionInfo] = useState<string | null>(null);
@@ -32,17 +34,26 @@ export function ImageUploader({
     setCompressionInfo(null);
 
     try {
-      // 1. Client-side compression to lightweight WebP (saves 85-95% Cloudinary quota)
-      const compressed = await compressImageClientSide(file, 1000, 1000, 0.82);
-      
-      const compressedKb = Math.round(compressed.compressedSizeBytes / 1024);
-      if (compressed.savedPercentage > 0) {
-        setCompressionInfo(`Optimized: ${compressedKb} KB (${compressed.savedPercentage}% Cloudinary storage saved)`);
+      let fileToUpload: File = file;
+
+      if (compress) {
+        // 1. Client-side compression to lightweight WebP (saves 85-95% Cloudinary quota for products/categories)
+        const compressed = await compressImageClientSide(file, 1000, 1000, 0.82);
+        fileToUpload = compressed.file;
+
+        const compressedKb = Math.round(compressed.compressedSizeBytes / 1024);
+        if (compressed.savedPercentage > 0) {
+          setCompressionInfo(`Optimized: ${compressedKb} KB (${compressed.savedPercentage}% Cloudinary storage saved)`);
+        }
+      } else {
+        // Hero banners: upload original untouched file for 100% full clarity and zero compression
+        const originalKb = Math.round(file.size / 1024);
+        setCompressionInfo(`Full Clarity HD: ${originalKb} KB (Original lossless quality, uncompressed)`);
       }
 
-      // 2. Upload lightweight compressed file to Cloudinary
+      // 2. Upload file to Cloudinary
       const formData = new FormData();
-      formData.append("file", compressed.file);
+      formData.append("file", fileToUpload);
       formData.append("folder", folder);
 
       const response = await fetch("/api/upload", {
@@ -81,7 +92,9 @@ export function ImageUploader({
           <ImageIcon className="w-3.5 h-3.5 text-[#ff4b77]" />
           <span>{label}</span>
         </span>
-        <span className="text-[11px] text-neutral-500 font-normal">Cloudinary Media CDN</span>
+        <span className="text-[11px] text-neutral-500 font-normal">
+          {compress ? "Cloudinary Media CDN" : "Cloudinary HD (Lossless)"}
+        </span>
       </label>
 
       {/* Preview if image is already set */}
@@ -149,7 +162,9 @@ export function ImageUploader({
                   Click to browse &amp; upload image
                 </p>
                 <p className="text-[11px] text-emerald-400/90 mt-0.5 font-medium">
-                  ⚡ Auto-compressed to lightweight WebP (saves Cloudinary quota)
+                  {compress
+                    ? "⚡ Auto-compressed to lightweight WebP (saves Cloudinary quota)"
+                    : "✨ Full Quality HD Original (Uncompressed / Maximum Clarity)"}
                 </p>
               </div>
             </div>

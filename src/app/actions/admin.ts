@@ -524,6 +524,7 @@ export async function createBannerAction(data: {
   secondary_cta_link?: string | null;
   desktop_image_url: string;
   mobile_image_url?: string | null;
+  cloudinary_public_id?: string | null;
   position?: string;
   display_order?: number;
   is_active?: boolean;
@@ -540,6 +541,7 @@ export async function createBannerAction(data: {
       secondary_cta_link: data.secondary_cta_link?.trim() || null,
       desktop_image_url: data.desktop_image_url,
       mobile_image_url: data.mobile_image_url || null,
+      cloudinary_public_id: data.cloudinary_public_id || null,
       position: data.position || "hero",
       display_order: data.display_order ?? 0,
       is_active: data.is_active ?? true,
@@ -566,6 +568,7 @@ export async function updateBannerAction(
     secondary_cta_link: string | null;
     desktop_image_url: string;
     mobile_image_url: string | null;
+    cloudinary_public_id: string | null;
     position: string;
     display_order: number;
     is_active: boolean;

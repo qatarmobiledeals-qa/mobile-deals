@@ -50,7 +50,7 @@ export default async function AdminBannersPage() {
               className="bg-neutral-900/90 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl flex flex-col justify-between group"
             >
               {/* Image Preview Container */}
-              <div className="relative aspect-video w-full bg-neutral-950 border-b border-neutral-800 overflow-hidden">
+              <div className="relative aspect-[16/6] w-full bg-neutral-950 border-b border-neutral-800 overflow-hidden">
                 <Image
                   src={banner.desktop_image_url}
                   alt={banner.title || "Hero Banner"}
@@ -58,7 +58,7 @@ export default async function AdminBannersPage() {
                   sizes="(max-width: 768px) 100vw, 50vw"
                   className="object-cover group-hover:scale-105 transition-transform duration-300"
                 />
-                <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-neutral-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-neutral-700/60 text-[10px] font-bold">
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-neutral-950/90 px-2.5 py-1 rounded-full border border-neutral-700/60 text-[10px] font-bold">
                   <span className="text-neutral-300">Order #{banner.display_order}</span>
                   <span className="text-neutral-500">&bull;</span>
                   <span className={banner.is_active ? "text-emerald-400" : "text-neutral-500"}>
