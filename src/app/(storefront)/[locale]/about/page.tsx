@@ -28,21 +28,42 @@ import {
   Zap,
 } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "About Us | Mobile Deals Qatar",
-  description:
-    "Discover Mobile Deals Qatar — your premier destination for 100% authentic smartphones, electronics, accessories, and gadgets with fast doorstep Cash on Delivery across Qatar.",
-  alternates: {
-    canonical: "https://mobiledealsqa.com/about",
-  },
-  openGraph: {
-    title: "About Us | Mobile Deals Qatar",
-    description:
-      "Qatar's trusted online electronics store offering authentic tech, direct WhatsApp support, and Cash on Delivery.",
-    url: "https://mobiledealsqa.com/about",
-    type: "website",
-  },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const isArabic = locale === "ar";
+  const baseUrl = "https://mobiledealsqa.com";
+
+  const title = isArabic
+    ? "من نحن | موبايل ديلز قطر"
+    : "About Us | Mobile Deals Qatar";
+  const description = isArabic
+    ? "تعرف على موبايل ديلز قطر — وجهتك الرائدة للهواتف الذكية والإلكترونيات الأصلية 100% مع الدفع عند الاستلام في كافة أنحاء قطر."
+    : "Discover Mobile Deals Qatar — your premier destination for 100% authentic smartphones, electronics, accessories, and gadgets with fast doorstep Cash on Delivery across Qatar.";
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `${baseUrl}/${locale}/about`,
+      languages: {
+        en: `${baseUrl}/en/about`,
+        ar: `${baseUrl}/ar/about`,
+        "x-default": `${baseUrl}/en/about`,
+      },
+    },
+    openGraph: {
+      title,
+      description,
+      url: `${baseUrl}/${locale}/about`,
+      locale: isArabic ? "ar_QA" : "en_QA",
+      type: "website",
+    },
+  };
+}
 
 export const revalidate = 86400; // 24 hours
 

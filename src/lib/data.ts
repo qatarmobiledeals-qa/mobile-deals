@@ -4,6 +4,7 @@ import { Banner, Brand, Category, Product, SiteSettings } from "@/types/database
 // Default settings if database table is not yet initialized
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   store_name: "MOBILE DEALS",
+  store_name_ar: "موبايل ديلز",
   whatsapp_number: "+97455000000",
   support_phone: "+97455000000",
   store_email: "support@mobiledeals.qa",
@@ -17,14 +18,19 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
       "Order on WhatsApp",
       "100% Genuine Products",
     ],
+    items_ar: [
+      "الدفع عند الاستلام متاح",
+      "الطلب عبر واتساب",
+      "منتجات أصلية 100%",
+    ],
   },
   trust_badges: {
     items: [
-      { title: "Top Brands", subtitle: "100% Authentic gear", icon: "trophy" },
-      { title: "Qatar Wide Delivery", subtitle: "Fast doorstep shipping", icon: "truck" },
-      { title: "Best Prices", subtitle: "Unbeatable Qatar deals", icon: "thumbs-up" },
-      { title: "Dedicated Support", subtitle: "WhatsApp assistance", icon: "headset" },
-      { title: "Secure Ordering", subtitle: "Cash on Delivery verified", icon: "shield-check" },
+      { title: "Top Brands", title_ar: "أفضل العلامات التجارية", subtitle: "100% Authentic gear", subtitle_ar: "منتجات أصلية 100%", icon: "trophy" },
+      { title: "Qatar Wide Delivery", title_ar: "توصيل شامل لكل قطر", subtitle: "Fast doorstep shipping", subtitle_ar: "شحن سريع حتى باب منزلك", icon: "truck" },
+      { title: "Best Prices", title_ar: "أفضل الأسعار", subtitle: "Unbeatable Qatar deals", subtitle_ar: "عروض تنافسية حصرية", icon: "thumbs-up" },
+      { title: "Dedicated Support", title_ar: "دعم مخصص", subtitle: "WhatsApp assistance", subtitle_ar: "مساعدة مباشرة عبر واتساب", icon: "headset" },
+      { title: "Secure Ordering", title_ar: "طلب آمن ومضمون", subtitle: "Cash on Delivery verified", subtitle_ar: "دفع نقدي موثوق عند الاستلام", icon: "shield-check" },
     ],
   },
 };

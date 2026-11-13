@@ -15,6 +15,7 @@ import { ChevronRight } from "lucide-react";
 
 interface ProductPageProps {
   params: Promise<{
+    locale: string;
     slug: string;
   }>;
 }
@@ -37,7 +38,7 @@ export async function generateStaticParams() {
 export async function generateMetadata({
   params,
 }: ProductPageProps): Promise<Metadata> {
-  const { slug } = await params;
+  const { locale, slug } = await params;
   const product = await getProductBySlug(slug);
 
   if (!product) {
@@ -46,31 +47,46 @@ export async function generateMetadata({
     };
   }
 
+  const isArabic = locale === "ar";
+  const name = (isArabic && product.name_ar?.trim()) ? product.name_ar.trim() : product.name;
+  const shortDesc = (isArabic && product.short_description_ar?.trim())
+    ? product.short_description_ar.trim()
+    : product.short_description;
+
   const primaryImage =
     product.product_images?.find((img) => img.is_primary)?.image_url ||
     product.product_images?.[0]?.image_url;
 
   const baseUrl = "https://mobiledealsqa.com";
-  const canonicalUrl = `${baseUrl}/products/${product.slug}`;
+  const canonicalUrl = `${baseUrl}/${locale}/products/${product.slug}`;
 
-  const metaTitle = `${product.name} | Best Price in Qatar`;
+  const metaTitle = isArabic
+    ? `${name} | أفضل سعر في قطر`
+    : `${name} | Best Price in Qatar`;
   const metaDesc =
-    product.short_description ||
-    `Buy ${product.name} at Mobile Deals Qatar with Cash on Delivery and fast doorstep shipping.`;
+    shortDesc ||
+    (isArabic
+      ? `اشترِ ${name} من موبايل ديلز قطر مع الدفع عند الاستلام وتوصيل سريع.`
+      : `Buy ${name} at Mobile Deals Qatar with Cash on Delivery and fast doorstep shipping.`);
 
   return {
     title: metaTitle,
     description: metaDesc,
     alternates: {
       canonical: canonicalUrl,
+      languages: {
+        en: `${baseUrl}/en/products/${product.slug}`,
+        ar: `${baseUrl}/ar/products/${product.slug}`,
+        "x-default": `${baseUrl}/en/products/${product.slug}`,
+      },
     },
     openGraph: {
-      title: `${product.name} | Mobile Deals Qatar`,
-      description:
-        product.short_description || `Buy ${product.name} in Qatar at the best price.`,
+      title: isArabic ? `${name} | موبايل ديلز قطر` : `${name} | Mobile Deals Qatar`,
+      description: metaDesc,
       url: canonicalUrl,
+      locale: isArabic ? "ar_QA" : "en_QA",
       type: "website",
-      images: primaryImage ? [{ url: primaryImage, alt: product.name }] : [],
+      images: primaryImage ? [{ url: primaryImage, alt: name }] : [],
     },
     twitter: {
       card: "summary_large_image" as const,

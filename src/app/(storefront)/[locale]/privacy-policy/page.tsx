@@ -9,14 +9,32 @@ import { Footer } from "@/components/store/footer";
 import { MobileBottomNav } from "@/components/store/mobile-bottom-nav";
 import { Lock, Shield, Eye, HelpCircle } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy | Mobile Deals Qatar",
-  description:
-    "Privacy Policy for Mobile Deals Qatar. Learn how we protect your personal information, contact data, and order details.",
-  alternates: {
-    canonical: "https://mobiledealsqa.com/privacy-policy",
-  },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const isArabic = locale === "ar";
+  const baseUrl = "https://mobiledealsqa.com";
+
+  return {
+    title: isArabic
+      ? "سياسة الخصوصية | موبايل ديلز قطر"
+      : "Privacy Policy | Mobile Deals Qatar",
+    description: isArabic
+      ? "سياسة الخصوصية لموقع موبايل ديلز قطر. تعرف على كيفية حماية معلوماتك الشخصية وبيانات الطلبات."
+      : "Privacy Policy for Mobile Deals Qatar. Learn how we protect your personal information, contact data, and order details.",
+    alternates: {
+      canonical: `${baseUrl}/${locale}/privacy-policy`,
+      languages: {
+        en: `${baseUrl}/en/privacy-policy`,
+        ar: `${baseUrl}/ar/privacy-policy`,
+        "x-default": `${baseUrl}/en/privacy-policy`,
+      },
+    },
+  };
+}
 
 export const revalidate = 86400; // 24 hours
 

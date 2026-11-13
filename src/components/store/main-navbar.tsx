@@ -2,14 +2,14 @@
 
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Search, User, Heart, ShoppingCart, Menu, X, ChevronRight, Sparkles, Loader2, ArrowRight, Tag, ShoppingBag } from "lucide-react";
+import { Link, useRouter } from "@/i18n/navigation";
+import { Search, Heart, ShoppingCart, Menu, X, ChevronRight, Sparkles, Loader2, ArrowRight, Tag, ShoppingBag } from "lucide-react";
 import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import Image from "next/image";
 import { Logo } from "@/components/ui/logo";
 import { useCart } from "@/hooks/use-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
 
 interface SearchResultItem {
   id: string;
@@ -327,8 +327,10 @@ export function MainNavbar({ whatsappNumber = "+97455000000", currency = "QAR" }
             <Logo size="md" />
           </div>
 
-          {/* Right: Cart Button + Hamburger Menu Button */}
+          {/* Right: Language Switcher + Cart Button + Hamburger Menu Button */}
           <div className="flex items-center gap-1.5">
+            <LanguageSwitcher variant="subtle" className="text-xs" />
+
             {/* Cart Button with Red Count Badge */}
             <Link
               href="/cart"
@@ -408,7 +410,10 @@ export function MainNavbar({ whatsappNumber = "+97455000000", currency = "QAR" }
           </div>
 
           {/* Right Action Icons & WhatsApp Button */}
-          <div className="flex items-center gap-4 md:gap-5">
+          <div className="flex items-center gap-3 lg:gap-4">
+            {/* Language Switcher */}
+            <LanguageSwitcher variant="pill" className="shrink-0" />
+
             {/* Wishlist */}
             <Link
               href="/#deals"
@@ -576,6 +581,11 @@ export function MainNavbar({ whatsappNumber = "+97455000000", currency = "QAR" }
                 <span>Service & Repair</span>
                 <ChevronRight className="w-4 h-4 text-neutral-400" />
               </Link>
+
+              <div className="pt-2 border-t border-neutral-100 flex items-center justify-between px-3 py-2">
+                <span className="text-xs font-medium text-neutral-500">Language / اللغة</span>
+                <LanguageSwitcher variant="pill" />
+              </div>
             </div>
 
             {/* Sidebar Bottom WhatsApp Action - Safe area padding & fully visible above phone bottom */}

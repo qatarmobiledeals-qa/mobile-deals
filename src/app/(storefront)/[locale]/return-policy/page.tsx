@@ -18,14 +18,32 @@ import {
   HelpCircle,
 } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Return Policy | Mobile Deals Qatar",
-  description:
-    "Official Return Policy for Mobile Deals Qatar. Learn about our 7-day return guidelines and special return conditions for mobile phones.",
-  alternates: {
-    canonical: "https://mobiledealsqa.com/return-policy",
-  },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const isArabic = locale === "ar";
+  const baseUrl = "https://mobiledealsqa.com";
+
+  return {
+    title: isArabic
+      ? "سياسة الإرجاع | موبايل ديلز قطر"
+      : "Return Policy | Mobile Deals Qatar",
+    description: isArabic
+      ? "سياسة الإرجاع الرسمية لموبايل ديلز قطر. تعرف على إرشادات الإرجاع خلال 7 أيام وشروط إرجاع الهواتف والأجهزة."
+      : "Official Return Policy for Mobile Deals Qatar. Learn about our 7-day return guidelines and special return conditions for mobile phones.",
+    alternates: {
+      canonical: `${baseUrl}/${locale}/return-policy`,
+      languages: {
+        en: `${baseUrl}/en/return-policy`,
+        ar: `${baseUrl}/ar/return-policy`,
+        "x-default": `${baseUrl}/en/return-policy`,
+      },
+    },
+  };
+}
 
 export const revalidate = 86400; // 24 hours
 

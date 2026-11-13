@@ -2,21 +2,18 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { createProductAction, updateProductAction, ProductInputPayload } from "@/app/actions/admin";
+import {
+  createProductAction,
+  updateProductAction,
+  ProductInputPayload,
+} from "@/app/actions/admin";
 import { deleteCloudinaryImageAction } from "@/app/actions/cloudinary";
-import { Category, Brand, Product } from "@/types/database";
+import { Category, Brand, Product, TranslationMetadata } from "@/types/database";
 import { ImageUploader } from "./image-uploader";
 import {
   Plus,
   Edit2,
-  X,
-  Loader2,
-  Tag,
-  Sparkles,
-  Layers,
-  DollarSign,
   Package,
-  Gift,
   Trash2,
   PlusCircle,
   CheckCircle2,
@@ -25,6 +22,14 @@ import {
   Star,
   Award,
   TableProperties,
+  Languages,
+  Sparkles,
+  X,
+  DollarSign,
+  Layers,
+  Gift,
+  Tag,
+  Loader2,
 } from "lucide-react";
 
 // Keys stored in specifications JSON that are internal (not user-facing specs)
@@ -96,16 +101,39 @@ export function ProductForm({
 
   // Images state
   const [images, setImages] = useState<
-    Array<{ image_url: string; cloudinary_public_id: string | null; is_primary: boolean }>
-  >([{ image_url: "", cloudinary_public_id: null, is_primary: true }]);
+    Array<{
+      image_url: string;
+      cloudinary_public_id: string | null;
+      is_primary: boolean;
+      alt_text?: string;
+      alt_text_ar?: string;
+    }>
+  >([{ image_url: "", cloudinary_public_id: null, is_primary: true, alt_text: "", alt_text_ar: "" }]);
 
   // Variants state
   const [variants, setVariants] = useState<
-    Array<{ name: string; sku: string; price: string; stock: string }>
+    Array<{
+      name: string;
+      name_ar?: string;
+      sku: string;
+      price: string;
+      stock: string;
+    }>
   >([]);
 
   // Technical Specifications state (key-value rows)
   const [specRows, setSpecRows] = useState<Array<{ key: string; value: string }>>([]);
+
+  // Arabic Localization State
+  const [nameAr, setNameAr] = useState("");
+  const [shortDescAr, setShortDescAr] = useState("");
+  const [descriptionAr, setDescriptionAr] = useState("");
+  const [warrantyAr, setWarrantyAr] = useState("");
+  const [badgeTextAr, setBadgeTextAr] = useState("");
+  const [freeGiftAr, setFreeGiftAr] = useState("");
+  const [isArabicReviewed, setIsArabicReviewed] = useState(false);
+  const [translationMetadata, setTranslationMetadata] = useState<TranslationMetadata>({});
+  const [specRowsAr, setSpecRowsAr] = useState<Array<{ key: string; value: string }>>([]);
 
   // Function to initialize/reset form with current product data or defaults
   const resetForm = useCallback(() => {
@@ -124,6 +152,16 @@ export function ProductForm({
       );
       setStock(product.stock !== undefined && product.stock !== null ? String(product.stock) : "10");
       setWarranty(product.warranty || "1 Year Qatar Official Warranty");
+
+      // Arabic Fields from product
+      setNameAr(product.name_ar || "");
+      setShortDescAr(product.short_description_ar || "");
+      setDescriptionAr(product.description_ar || "");
+      setWarrantyAr(product.warranty_ar || "");
+      setBadgeTextAr(product.badge_text_ar || "");
+      setFreeGiftAr(product.free_gift_ar || "");
+      setIsArabicReviewed(Boolean(product.is_arabic_reviewed));
+      setTranslationMetadata(product.translation_metadata || {});
 
       // Initialize Gift & Badge
       const giftImgFromSpecs = product.specifications?.gift_image || "";
@@ -152,6 +190,8 @@ export function ProductForm({
               image_url: img.image_url,
               cloudinary_public_id: img.cloudinary_public_id || null,
               is_primary: Boolean(img.is_primary),
+              alt_text: img.alt_text || "",
+              alt_text_ar: img.alt_text_ar || "",
             }))
           : [{ image_url: "", cloudinary_public_id: null, is_primary: true }];
       setImages(loadedImages);
@@ -160,6 +200,7 @@ export function ProductForm({
         product.product_variants && product.product_variants.length > 0
           ? product.product_variants.map((v) => ({
               name: v.name,
+              name_ar: v.name_ar || "",
               sku: v.sku || "",
               price: v.price !== undefined && v.price !== null ? String(v.price) : "",
               stock: String(v.stock ?? 5),
@@ -172,6 +213,12 @@ export function ProductForm({
         .filter(([k]) => !INTERNAL_SPEC_KEYS.has(k))
         .map(([key, value]) => ({ key, value: String(value) }));
       setSpecRows(loadedSpecRows);
+
+      // Load Arabic spec rows from specifications_ar
+      const loadedSpecRowsAr = Object.entries(product.specifications_ar || {})
+        .filter(([k]) => !INTERNAL_SPEC_KEYS.has(k))
+        .map(([key, value]) => ({ key, value: String(value) }));
+      setSpecRowsAr(loadedSpecRowsAr);
     } else {
       setName("");
       setSlug("");
@@ -197,6 +244,16 @@ export function ProductForm({
       setImages([{ image_url: "", cloudinary_public_id: null, is_primary: true }]);
       setVariants([]);
       setSpecRows([]);
+      // Arabic reset
+      setNameAr("");
+      setShortDescAr("");
+      setDescriptionAr("");
+      setWarrantyAr("");
+      setBadgeTextAr("");
+      setFreeGiftAr("");
+      setIsArabicReviewed(false);
+      setTranslationMetadata({});
+      setSpecRowsAr([]);
     }
     setError(null);
   }, [product]);
@@ -204,6 +261,7 @@ export function ProductForm({
   // Sync state whenever modal opens or product changes
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       resetForm();
     }
   }, [open, resetForm]);
@@ -282,11 +340,19 @@ export function ProductForm({
     );
   };
 
+  const handleImageAltChange = (targetUrl: string, field: "alt_text" | "alt_text_ar", val: string) => {
+    setImages((prev) =>
+      prev.map((img) =>
+        img.image_url.trim() === targetUrl.trim() ? { ...img, [field]: val } : img
+      )
+    );
+  };
+
   // Add/Remove Variant
   const handleAddVariant = () => {
     setVariants((prev) => [
       ...prev,
-      { name: "12GB / 256GB - Phantom Black", sku: "", price: price || "0", stock: "5" },
+      { name: "12GB / 256GB - Phantom Black", name_ar: "", sku: "", price: price || "0", stock: "5" },
     ]);
   };
 
@@ -300,7 +366,7 @@ export function ProductForm({
     );
   };
 
-  // Spec row handlers
+  // Spec row handlers (English)
   const handleAddSpecRow = () => {
     setSpecRows((prev) => [...prev, { key: "", value: "" }]);
   };
@@ -311,6 +377,21 @@ export function ProductForm({
 
   const handleSpecRowChange = (index: number, field: "key" | "value", val: string) => {
     setSpecRows((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, [field]: val } : row))
+    );
+  };
+
+  // Spec row handlers (Arabic)
+  const handleAddSpecRowAr = () => {
+    setSpecRowsAr((prev) => [...prev, { key: "", value: "" }]);
+  };
+
+  const handleRemoveSpecRowAr = (index: number) => {
+    setSpecRowsAr((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleSpecRowArChange = (index: number, field: "key" | "value", val: string) => {
+    setSpecRowsAr((prev) =>
       prev.map((row, idx) => (idx === index ? { ...row, [field]: val } : row))
     );
   };
@@ -332,10 +413,13 @@ export function ProductForm({
           cloudinary_public_id: img.cloudinary_public_id || null,
           is_primary: img.is_primary ?? idx === 0,
           display_order: idx + 1,
+          alt_text: img.alt_text || null,
+          alt_text_ar: img.alt_text_ar || null,
         }));
 
       const formattedVariants = variants.map((v) => ({
         name: v.name.trim(),
+        name_ar: v.name_ar?.trim() || null,
         sku: v.sku.trim() || undefined,
         price: v.price ? Number(v.price) : undefined,
         stock:
@@ -363,19 +447,78 @@ export function ProductForm({
         finalSpecifications["gift_enabled"] = "true";
       }
 
+      // Build finalSpecificationsAr from specRowsAr
+      const finalSpecificationsAr: Record<string, string> = {};
+      for (const row of specRowsAr) {
+        const k = row.key.trim();
+        const v = row.value.trim();
+        if (k) finalSpecificationsAr[k] = v;
+      }
+
+      // Update manual translation metadata
+      const nowIso = new Date().toISOString();
+      const updatedMetadata: TranslationMetadata = { ...translationMetadata };
+
+      const setFieldMeta = (fieldKey: string, arabicVal?: string | null) => {
+        if (arabicVal && arabicVal.trim()) {
+          updatedMetadata[fieldKey] = {
+            source: "manual",
+            reviewed: isArabicReviewed,
+            updated_at: nowIso,
+          };
+        }
+      };
+
+      setFieldMeta("name", nameAr);
+      setFieldMeta("short_description", shortDescAr);
+      setFieldMeta("description", descriptionAr);
+      setFieldMeta("warranty", warrantyAr);
+      if (giftEnabled) setFieldMeta("free_gift", freeGiftAr);
+      setFieldMeta("badge_text", badgeTextAr);
+
+      if (Object.keys(finalSpecificationsAr).length > 0) {
+        updatedMetadata.specifications = {
+          source: "manual",
+          reviewed: isArabicReviewed,
+          updated_at: nowIso,
+        };
+      }
+
+      if (formattedVariants.some((v) => v.name_ar && v.name_ar.trim())) {
+        updatedMetadata.variants = {
+          source: "manual",
+          reviewed: isArabicReviewed,
+          updated_at: nowIso,
+        };
+      }
+
+      if (validImages.some((img) => img.alt_text_ar && img.alt_text_ar.trim())) {
+        updatedMetadata.images = {
+          source: "manual",
+          reviewed: isArabicReviewed,
+          updated_at: nowIso,
+        };
+      }
+
       const payload: ProductInputPayload = {
         name: name.trim(),
+        name_ar: nameAr.trim() || null,
         slug: slug.trim(),
         category_id: categoryId || null,
         brand_id: brandId || null,
         short_description: (shortDesc.trim() || null) as unknown as string,
+        short_description_ar: shortDescAr.trim() || null,
         description: (description.trim() || null) as unknown as string,
+        description_ar: descriptionAr.trim() || null,
         price: Number(price),
         compare_at_price: compareAtPrice ? Number(compareAtPrice) : null,
         stock: stock !== "" ? Number(stock) : 10,
         warranty: (warranty.trim() || null) as unknown as string,
+        warranty_ar: warrantyAr.trim() || null,
         free_gift: giftEnabled && giftName.trim() ? giftName.trim() : (null as unknown as string),
+        free_gift_ar: giftEnabled && freeGiftAr.trim() ? freeGiftAr.trim() : null,
         badge_text: giftEnabled ? (badgeText.trim() || "Free Gift") : (badgeText.trim() || (null as unknown as string)),
+        badge_text_ar: badgeTextAr.trim() || null,
         is_today_deal: isTodayDeal,
         is_best_deal: isBestDeal,
         is_featured: isFeatured,
@@ -384,6 +527,10 @@ export function ProductForm({
         deal_ends_at: dealEndsAt ? new Date(dealEndsAt).toISOString() : null,
         is_active: isActive,
         specifications: finalSpecifications,
+        specifications_ar: Object.keys(finalSpecificationsAr).length > 0 ? finalSpecificationsAr : null,
+        is_arabic_reviewed: isArabicReviewed,
+        arabic_updated_at: nameAr.trim() ? nowIso : null,
+        translation_metadata: updatedMetadata,
         images: validImages,
         variants: formattedVariants,
       };
@@ -462,6 +609,49 @@ export function ProductForm({
                 <span>{error}</span>
               </div>
             )}
+
+            {/* Top Quick-Action Bar for Arabic Content Status */}
+            <div className="mx-6 sm:mx-8 mt-4 px-5 py-3 rounded-2xl bg-neutral-950/80 border border-neutral-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-[#8A1538]/15 text-[#ff4b77]">
+                  <Languages className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white">Arabic Content Management</span>
+                    {isArabicReviewed ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold border border-emerald-500/30 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Reviewed &amp; Approved</span>
+                      </span>
+                    ) : nameAr ? (
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-semibold border border-cyan-500/30">
+                        Arabic Content Added
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 text-[10px] font-semibold">
+                        Not Translated Yet
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-neutral-400 mt-0.5">
+                    Enter manual Arabic product titles, descriptions, technical specifications, and variant details below in Section 8.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <label className="flex items-center gap-2 cursor-pointer bg-neutral-900 px-3 py-1.5 rounded-xl border border-neutral-800 hover:border-neutral-700 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={isArabicReviewed}
+                    onChange={(e) => setIsArabicReviewed(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-[#8A1538] rounded cursor-pointer"
+                  />
+                  <span className="text-xs font-semibold text-neutral-300">Mark Reviewed</span>
+                </label>
+              </div>
+            </div>
 
             {/* Scrollable Form Body - 2-Column Desktop Widescreen Layout */}
             <form onSubmit={handleSubmit} className="p-6 sm:p-8 overflow-y-auto flex-1 text-xs">
@@ -692,13 +882,21 @@ export function ProductForm({
                             key={idx}
                             className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-2xl bg-neutral-900 border border-neutral-800 items-center"
                           >
-                            <div className="sm:col-span-5">
+                            <div className="sm:col-span-5 space-y-1.5">
                               <input
                                 type="text"
                                 value={v.name}
                                 onChange={(e) => handleVariantChange(idx, "name", e.target.value)}
                                 placeholder="e.g. 512GB Titanium Black"
-                                className="w-full h-10 px-3 rounded-xl bg-neutral-950 border border-neutral-800 text-white text-xs focus:outline-none focus:border-[#8A1538]"
+                                className="w-full h-9 px-3 rounded-xl bg-neutral-950 border border-neutral-800 text-white text-xs focus:outline-none focus:border-[#8A1538]"
+                              />
+                              <input
+                                type="text"
+                                dir="rtl"
+                                value={v.name_ar || ""}
+                                onChange={(e) => handleVariantChange(idx, "name_ar", e.target.value)}
+                                placeholder="الاسم بالعربية (مثال: 512 جيجابايت أسود تيتانيوم)"
+                                className="w-full h-8 px-3 rounded-lg bg-neutral-950/90 border border-neutral-800/80 text-neutral-300 text-[11px] focus:outline-none focus:border-[#8A1538] text-right"
                               />
                             </div>
                             <div className="sm:col-span-2">
@@ -856,6 +1054,229 @@ export function ProductForm({
                       </div>
                     )}
                   </div>
+
+                  {/* SECTION 8: Arabic Localization & Catalog Content */}
+                  <div className="p-5 sm:p-6 rounded-2xl bg-neutral-950/70 border border-neutral-800 space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-neutral-800/80 pb-3 gap-2">
+                      <div className="flex items-center gap-2">
+                        <Languages className="w-4 h-4 text-[#ff4b77]" />
+                        <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-200">
+                          8. Arabic Localization (التعريب والمحتوى العربي)
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* Review Status & Provenance Card */}
+                    <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <label className="flex items-start sm:items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isArabicReviewed}
+                          onChange={(e) => setIsArabicReviewed(e.target.checked)}
+                          className="w-4 h-4 accent-[#8A1538] rounded cursor-pointer mt-0.5 sm:mt-0"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                            <CheckCircle2 className={`w-3.5 h-3.5 ${isArabicReviewed ? "text-emerald-400" : "text-neutral-500"}`} />
+                            <span>Mark Arabic translation as reviewed and approved</span>
+                          </span>
+                          <p className="text-[10px] text-neutral-400 mt-0.5">
+                            Confirm that Arabic product copy, specs, and variants have been verified for accuracy.
+                          </p>
+                        </div>
+                      </label>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                        {isArabicReviewed ? (
+                          <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/30">
+                            Approved
+                          </span>
+                        ) : nameAr ? (
+                          <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 text-[11px] font-bold border border-cyan-500/30">
+                            In Progress
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-lg bg-neutral-800 text-neutral-500 text-[11px] font-bold">
+                            Not Translated
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Arabic Text Inputs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Arabic Product Name */}
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Product Name (اسم المنتج بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="rtl"
+                          value={nameAr}
+                          onChange={(e) => setNameAr(e.target.value)}
+                          placeholder="مثال: سامسونج جالاكسي S25 الترا 5G"
+                          className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                        />
+                      </div>
+
+                      {/* Arabic Warranty */}
+                      <div className="space-y-1.5">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Warranty (الضمان بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="rtl"
+                          value={warrantyAr}
+                          onChange={(e) => setWarrantyAr(e.target.value)}
+                          placeholder="مثال: ضمان رسمي لمدة عام في قطر"
+                          className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                        />
+                      </div>
+
+                      {/* Arabic Marketing Badge */}
+                      <div className="space-y-1.5">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Badge Text (شارة العرض بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="rtl"
+                          value={badgeTextAr}
+                          onChange={(e) => setBadgeTextAr(e.target.value)}
+                          placeholder="مثال: عرض خاص، هدية مجانية"
+                          className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                        />
+                      </div>
+
+                      {/* Arabic Free Gift */}
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Free Gift Offer (الهدية المجانية بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="rtl"
+                          value={freeGiftAr}
+                          onChange={(e) => setFreeGiftAr(e.target.value)}
+                          placeholder="مثال: سماعة لاسلكية مجانية، شاحن سريع 45 واط"
+                          className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                        />
+                      </div>
+
+                      {/* Arabic Short Subtitle */}
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Short Highlights Specs (أبرز المواصفات بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="rtl"
+                          value={shortDescAr}
+                          onChange={(e) => setShortDescAr(e.target.value)}
+                          placeholder="مثال: 12 جيجابايت رام / 512 جيجابايت - أسود تيتانيوم - معالج سنابدراجون 8 إيليت"
+                          className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                        />
+                      </div>
+
+                      {/* Arabic Detailed Description */}
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Detailed Description (الوصف التفصيلي بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <textarea
+                          rows={4}
+                          dir="rtl"
+                          value={descriptionAr}
+                          onChange={(e) => setDescriptionAr(e.target.value)}
+                          placeholder="المواصفات الشاملة للمنتج، المميزات، محتويات العلبة باللغة العربية..."
+                          className="w-full p-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] resize-y text-xs sm:text-sm text-right"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Arabic Specifications Table */}
+                    <div className="pt-4 border-t border-neutral-800/80 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <TableProperties className="w-4 h-4 text-cyan-400" />
+                          <h4 className="text-xs font-bold text-neutral-200 uppercase tracking-wider">
+                            Arabic Technical Specifications (جدول المواصفات بالعربية)
+                          </h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddSpecRowAr}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold hover:bg-cyan-500/25 transition-all cursor-pointer"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          <span>Add Arabic Row</span>
+                        </button>
+                      </div>
+
+                      {specRowsAr.length === 0 ? (
+                        <div className="text-center p-4 rounded-xl bg-neutral-900 border border-dashed border-neutral-800">
+                          <p className="text-[11px] text-neutral-500 italic">
+                            No Arabic specifications added yet. Click &quot;Add Arabic Row&quot; to specify Arabic key-value pairs manually.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-12 gap-2 px-1 pb-1 border-b border-neutral-800">
+                            <span className="col-span-5 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-right">
+                              المواصفة (Arabic Label)
+                            </span>
+                            <span className="col-span-6 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-right">
+                              التفاصيل والقيمة (Arabic Detail)
+                            </span>
+                            <span className="col-span-1" />
+                          </div>
+
+                          {specRowsAr.map((row, idx) => (
+                            <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                              <div className="col-span-5">
+                                <input
+                                  type="text"
+                                  dir="rtl"
+                                  value={row.key}
+                                  onChange={(e) => handleSpecRowArChange(idx, "key", e.target.value)}
+                                  placeholder="مثال: حجم الشاشة"
+                                  className="w-full h-9 px-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 text-right"
+                                />
+                              </div>
+                              <div className="col-span-6">
+                                <input
+                                  type="text"
+                                  dir="rtl"
+                                  value={row.value}
+                                  onChange={(e) => handleSpecRowArChange(idx, "value", e.target.value)}
+                                  placeholder="مثال: 6.8 بوصة Dynamic AMOLED"
+                                  className="w-full h-9 px-3 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/20 text-right"
+                                />
+                              </div>
+                              <div className="col-span-1 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSpecRowAr(idx)}
+                                  className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                  title="Remove Arabic row"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Right Column (5 cols): Media Gallery, Marketing Badges, Visibility Switches */}
@@ -998,6 +1419,30 @@ export function ProductForm({
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
+
+                                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-500/20">
+                                    <div>
+                                      <label className="text-[10px] text-neutral-400 block mb-1">Alt Text (English)</label>
+                                      <input
+                                        type="text"
+                                        value={coverImage.alt_text || ""}
+                                        onChange={(e) => handleImageAltChange(coverImage.image_url, "alt_text", e.target.value)}
+                                        placeholder="e.g. Front view of phone"
+                                        className="w-full h-8 px-2.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white text-[11px] placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538]"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] text-neutral-400 block mb-1 text-right">النص البديل (عربي)</label>
+                                      <input
+                                        type="text"
+                                        dir="rtl"
+                                        value={coverImage.alt_text_ar || ""}
+                                        onChange={(e) => handleImageAltChange(coverImage.image_url, "alt_text_ar", e.target.value)}
+                                        placeholder="مثال: الواجهة الأمامية للجهاز"
+                                        className="w-full h-8 px-2.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white text-[11px] text-right placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538]"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
                               )}
 
@@ -1017,44 +1462,64 @@ export function ProductForm({
                                     {additionalImages.map((img, addIdx) => (
                                       <div
                                         key={img.image_url + addIdx}
-                                        className="flex items-center justify-between p-3 rounded-2xl bg-neutral-900 border border-neutral-800 text-xs hover:border-neutral-700 transition-colors"
+                                        className="p-3 rounded-2xl bg-neutral-900 border border-neutral-800 text-xs hover:border-neutral-700 transition-colors space-y-2"
                                       >
-                                        <div className="flex items-center gap-3 min-w-0 pr-2">
-                                          <img
-                                            src={img.image_url}
-                                            alt={`thumb ${addIdx + 2}`}
-                                            className="w-11 h-11 object-contain rounded-xl bg-neutral-950 border border-neutral-800 shrink-0 p-1"
-                                          />
-                                          <div className="min-w-0">
-                                            <p
-                                              className="font-mono text-[11px] text-neutral-300 truncate max-w-[170px]"
-                                              title={img.image_url}
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-3 min-w-0 pr-2">
+                                            <img
+                                              src={img.image_url}
+                                              alt={`thumb ${addIdx + 2}`}
+                                              className="w-11 h-11 object-contain rounded-xl bg-neutral-950 border border-neutral-800 shrink-0 p-1"
+                                            />
+                                            <div className="min-w-0">
+                                              <p
+                                                className="font-mono text-[11px] text-neutral-300 truncate max-w-[170px]"
+                                                title={img.image_url}
+                                              >
+                                                {img.image_url}
+                                              </p>
+                                              <span className="text-[10px] text-neutral-500">
+                                                Slot #{addIdx + 2}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSetPrimaryImage(img.image_url)}
+                                              className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-all cursor-pointer"
+                                              title="Set as main cover image"
                                             >
-                                              {img.image_url}
-                                            </p>
-                                            <span className="text-[10px] text-neutral-500">
-                                              Slot #{addIdx + 2}
-                                            </span>
+                                              Make Cover
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveImage(img.image_url)}
+                                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                              title="Delete image"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
                                           </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2 shrink-0">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleSetPrimaryImage(img.image_url)}
-                                            className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-all cursor-pointer"
-                                            title="Set as main cover image"
-                                          >
-                                            Make Cover
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemoveImage(img.image_url)}
-                                            className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer"
-                                            title="Delete image"
-                                          >
-                                            <Trash2 className="w-4 h-4" />
-                                          </button>
+                                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-800/80">
+                                          <input
+                                            type="text"
+                                            value={img.alt_text || ""}
+                                            onChange={(e) => handleImageAltChange(img.image_url, "alt_text", e.target.value)}
+                                            placeholder="Alt Text (EN)"
+                                            className="w-full h-7 px-2 rounded-lg bg-neutral-950 border border-neutral-800 text-white text-[10px] placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538]"
+                                          />
+                                          <input
+                                            type="text"
+                                            dir="rtl"
+                                            value={img.alt_text_ar || ""}
+                                            onChange={(e) => handleImageAltChange(img.image_url, "alt_text_ar", e.target.value)}
+                                            placeholder="النص البديل (عربي)"
+                                            className="w-full h-7 px-2 rounded-lg bg-neutral-950 border border-neutral-800 text-white text-[10px] text-right placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538]"
+                                          />
                                         </div>
                                       </div>
                                     ))}

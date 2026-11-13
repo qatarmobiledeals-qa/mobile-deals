@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 
 interface CategoryPageProps {
   params: Promise<{
+    locale: string;
     slug: string;
   }>;
 }
@@ -68,21 +69,43 @@ function findCategory(categories: any[], slugParam: string) {
 }
 
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
-  const { slug } = await params;
+  const { locale, slug } = await params;
   const categories = await getCategories();
   const category = findCategory(categories, slug);
   if (!category) return { title: "Category Not Found" };
   const baseUrl = "https://mobiledealsqa.com";
-  const canonicalUrl = `${baseUrl}/categories/${category.slug}`;
-  const title = `${category.name} in Qatar | Mobile Deals Qatar`;
-  const description = category.description || `Shop the best ${category.name} in Qatar at Mobile Deals. Genuine products, unbeatable prices, and Cash on Delivery nationwide.`;
+  const isArabic = locale === "ar";
+  const name = (isArabic && category.name_ar?.trim()) ? category.name_ar.trim() : category.name;
+  const description = (isArabic && category.description_ar?.trim())
+    ? category.description_ar.trim()
+    : category.description ||
+      (isArabic
+        ? `تسوق أفضل منتجات ${name} في قطر مع موبايل ديلز. منتجات أصلية، أفضل الأسعار، والدفع عند الاستلام.`
+        : `Shop the best ${name} in Qatar at Mobile Deals. Genuine products, unbeatable prices, and Cash on Delivery nationwide.`);
+
+  const canonicalUrl = `${baseUrl}/${locale}/categories/${category.slug}`;
+  const title = isArabic
+    ? `${name} في قطر | موبايل ديلز قطر`
+    : `${name} in Qatar | Mobile Deals Qatar`;
+
   return {
     title,
     description,
-    alternates: { canonical: canonicalUrl },
+    alternates: {
+      canonical: canonicalUrl,
+      languages: {
+        en: `${baseUrl}/en/categories/${category.slug}`,
+        ar: `${baseUrl}/ar/categories/${category.slug}`,
+        "x-default": `${baseUrl}/en/categories/${category.slug}`,
+      },
+    },
     openGraph: {
-      title, description, url: canonicalUrl, type: "website",
-      images: category.image_url ? [{ url: category.image_url, alt: category.name }] : [],
+      title,
+      description,
+      url: canonicalUrl,
+      locale: isArabic ? "ar_QA" : "en_QA",
+      type: "website",
+      images: category.image_url ? [{ url: category.image_url, alt: name }] : [],
     },
   };
 }

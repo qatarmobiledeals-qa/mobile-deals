@@ -9,21 +9,42 @@ import { Footer } from "@/components/store/footer";
 import { MobileBottomNav } from "@/components/store/mobile-bottom-nav";
 import { Loader2 } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Shop | Mobile Deals Qatar",
-  description:
-    "Explore our complete collection of smartphones, tablets, laptops, accessories, and exclusive Qatar deals. Filter by category, brand, price, and special offers with fast delivery across Qatar.",
-  alternates: {
-    canonical: "https://mobiledealsqa.com/shop",
-  },
-  openGraph: {
-    title: "Shop All Tech Deals | Mobile Deals Qatar",
-    description:
-      "Browse smartphones, earphones, chargers, and mobile accessories with Cash on Delivery in Qatar.",
-    url: "https://mobiledealsqa.com/shop",
-    type: "website",
-  },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const isArabic = locale === "ar";
+  const baseUrl = "https://mobiledealsqa.com";
+
+  const title = isArabic
+    ? "المتجر | موبايل ديلز قطر"
+    : "Shop | Mobile Deals Qatar";
+  const description = isArabic
+    ? "تصفح مجموعتنا الكاملة من الهواتف الذكية، الأجهزة اللوحية، الإكسسوارات وعروض قطر الحصرية مع توصيل سريع والدفع عند الاستلام."
+    : "Explore our complete collection of smartphones, tablets, laptops, accessories, and exclusive Qatar deals. Filter by category, brand, price, and special offers with fast delivery across Qatar.";
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `${baseUrl}/${locale}/shop`,
+      languages: {
+        en: `${baseUrl}/en/shop`,
+        ar: `${baseUrl}/ar/shop`,
+        "x-default": `${baseUrl}/en/shop`,
+      },
+    },
+    openGraph: {
+      title,
+      description,
+      url: `${baseUrl}/${locale}/shop`,
+      locale: isArabic ? "ar_QA" : "en_QA",
+      type: "website",
+    },
+  };
+}
 
 export const revalidate = 86400; // 24 hours (prevents ISR write spikes under Meta ad traffic)
 

@@ -2,11 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SiteSettings } from "@/types/database";
+import { SiteSettings, TranslationMetadata } from "@/types/database";
+import { getAdminSession } from "./auth";
+import { resolveProductArabicReviewState } from "@/lib/product/arabic-review";
 import {
   deleteCloudinaryImageAction,
   deleteMultipleCloudinaryImagesAction,
 } from "./cloudinary";
+
+/**
+ * Revalidates a path across all supported storefront locales as well as root.
+ */
+function revalidateStorefrontPath(path: string) {
+  const clean = path.startsWith("/") ? path : `/${path}`;
+  revalidatePath(clean);
+  revalidatePath(`/en${clean === "/" ? "" : clean}`);
+  revalidatePath(`/ar${clean === "/" ? "" : clean}`);
+}
 
 /* ======================================================================
    PRODUCT ACTIONS
@@ -15,17 +27,23 @@ import {
 export interface ProductInputPayload {
   id?: string;
   name: string;
+  name_ar?: string | null;
   slug: string;
   category_id?: string | null;
   brand_id?: string | null;
   short_description?: string;
+  short_description_ar?: string | null;
   description?: string;
+  description_ar?: string | null;
   price: number;
   compare_at_price?: number | null;
   stock?: number;
   warranty?: string;
+  warranty_ar?: string | null;
   free_gift?: string;
+  free_gift_ar?: string | null;
   badge_text?: string;
+  badge_text_ar?: string | null;
   is_featured?: boolean;
   is_best_deal?: boolean;
   is_today_deal?: boolean;
@@ -34,14 +52,21 @@ export interface ProductInputPayload {
   deal_ends_at?: string | null;
   is_active?: boolean;
   specifications?: Record<string, string>;
+  specifications_ar?: Record<string, string> | null;
+  is_arabic_reviewed?: boolean;
+  arabic_updated_at?: string | null;
+  translation_metadata?: TranslationMetadata | null;
   images?: Array<{
     image_url: string;
     cloudinary_public_id?: string | null;
     is_primary?: boolean;
     display_order?: number;
+    alt_text?: string | null;
+    alt_text_ar?: string | null;
   }>;
   variants?: Array<{
     name: string;
+    name_ar?: string | null;
     sku?: string;
     price?: number | null;
     compare_at_price?: number | null;
@@ -51,23 +76,35 @@ export interface ProductInputPayload {
 
 export async function createProductAction(data: ProductInputPayload) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
+
+    const reviewState = resolveProductArabicReviewState(data, null);
     const supabase = createAdminClient();
 
     const { data: product, error } = await supabase
       .from("products")
       .insert({
         name: data.name.trim(),
+        name_ar: data.name_ar?.trim() || null,
         slug: data.slug.trim(),
         category_id: data.category_id || null,
         brand_id: data.brand_id || null,
         short_description: data.short_description || null,
+        short_description_ar: data.short_description_ar?.trim() || null,
         description: data.description || null,
+        description_ar: data.description_ar?.trim() || null,
         price: data.price,
         compare_at_price: data.compare_at_price || null,
         stock: data.stock !== undefined ? data.stock : 10,
         warranty: data.warranty || null,
+        warranty_ar: data.warranty_ar?.trim() || null,
         free_gift: data.free_gift || null,
+        free_gift_ar: data.free_gift_ar?.trim() || null,
         badge_text: data.badge_text || null,
+        badge_text_ar: data.badge_text_ar?.trim() || null,
         is_featured: Boolean(data.is_featured),
         is_best_deal: Boolean(data.is_best_deal),
         is_today_deal: Boolean(data.is_today_deal),
@@ -75,6 +112,10 @@ export async function createProductAction(data: ProductInputPayload) {
         is_new_arrival: Boolean(data.is_new_arrival),
         deal_ends_at: data.deal_ends_at || null,
         specifications: data.specifications || {},
+        specifications_ar: data.specifications_ar || null,
+        is_arabic_reviewed: reviewState.is_arabic_reviewed,
+        arabic_updated_at: reviewState.arabic_updated_at,
+        translation_metadata: reviewState.translation_metadata,
         is_active: data.is_active !== undefined ? Boolean(data.is_active) : true,
       })
       .select("id")
@@ -90,6 +131,8 @@ export async function createProductAction(data: ProductInputPayload) {
         cloudinary_public_id: img.cloudinary_public_id || null,
         is_primary: img.is_primary ?? idx === 0,
         display_order: img.display_order ?? idx + 1,
+        alt_text: img.alt_text || null,
+        alt_text_ar: img.alt_text_ar || null,
       }));
       const { error: imgErr } = await supabase.from("product_images").insert(imagesToInsert);
       if (imgErr) throw imgErr;
@@ -100,6 +143,7 @@ export async function createProductAction(data: ProductInputPayload) {
       const variantsToInsert = data.variants.map((v) => ({
         product_id: product.id,
         name: v.name,
+        name_ar: v.name_ar?.trim() || null,
         sku: v.sku || null,
         price: v.price || null,
         compare_at_price: v.compare_at_price || null,
@@ -109,8 +153,8 @@ export async function createProductAction(data: ProductInputPayload) {
       if (varErr) throw varErr;
     }
 
-    revalidatePath("/");
-    revalidatePath("/shop");
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/shop");
     revalidatePath("/admin");
     revalidatePath("/admin/products");
 
@@ -130,24 +174,73 @@ export async function createProductAction(data: ProductInputPayload) {
 
 export async function updateProductAction(id: string, data: Partial<ProductInputPayload>) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
+
     const supabase = createAdminClient();
+
+    // Fetch existing product for comparative audit
+    const { data: existingProduct, error: fetchErr } = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !existingProduct) {
+      return { success: false, error: "Product not found." };
+    }
+
+    // Merge incoming partial data with existing product data for review state evaluation
+    const mergedForReview: ProductInputPayload = {
+      name: data.name ?? existingProduct.name ?? "",
+      name_ar: data.name_ar !== undefined ? data.name_ar : existingProduct.name_ar,
+      slug: data.slug ?? existingProduct.slug ?? "",
+      short_description: data.short_description !== undefined ? data.short_description : existingProduct.short_description,
+      short_description_ar: data.short_description_ar !== undefined ? data.short_description_ar : existingProduct.short_description_ar,
+      description: data.description !== undefined ? data.description : existingProduct.description,
+      description_ar: data.description_ar !== undefined ? data.description_ar : existingProduct.description_ar,
+      price: data.price !== undefined ? data.price : existingProduct.price,
+      warranty: data.warranty !== undefined ? data.warranty : existingProduct.warranty,
+      warranty_ar: data.warranty_ar !== undefined ? data.warranty_ar : existingProduct.warranty_ar,
+      free_gift: data.free_gift !== undefined ? data.free_gift : existingProduct.free_gift,
+      free_gift_ar: data.free_gift_ar !== undefined ? data.free_gift_ar : existingProduct.free_gift_ar,
+      badge_text: data.badge_text !== undefined ? data.badge_text : existingProduct.badge_text,
+      badge_text_ar: data.badge_text_ar !== undefined ? data.badge_text_ar : existingProduct.badge_text_ar,
+      specifications: data.specifications !== undefined ? data.specifications : existingProduct.specifications,
+      specifications_ar: data.specifications_ar !== undefined ? data.specifications_ar : existingProduct.specifications_ar,
+      is_arabic_reviewed: data.is_arabic_reviewed !== undefined ? data.is_arabic_reviewed : existingProduct.is_arabic_reviewed,
+      translation_metadata: data.translation_metadata !== undefined ? data.translation_metadata : existingProduct.translation_metadata,
+      arabic_updated_at: data.arabic_updated_at,
+      variants: data.variants,
+      images: data.images,
+    };
+
+    const reviewState = resolveProductArabicReviewState(mergedForReview, existingProduct);
 
     const updatePayload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
     if (data.name !== undefined) updatePayload.name = data.name.trim();
+    if (data.name_ar !== undefined) updatePayload.name_ar = data.name_ar ? data.name_ar.trim() : null;
     if (data.slug !== undefined) updatePayload.slug = data.slug.trim();
     if (data.category_id !== undefined) updatePayload.category_id = data.category_id || null;
     if (data.brand_id !== undefined) updatePayload.brand_id = data.brand_id || null;
     if (data.short_description !== undefined) updatePayload.short_description = data.short_description || null;
+    if (data.short_description_ar !== undefined) updatePayload.short_description_ar = data.short_description_ar ? data.short_description_ar.trim() : null;
     if (data.description !== undefined) updatePayload.description = data.description || null;
+    if (data.description_ar !== undefined) updatePayload.description_ar = data.description_ar ? data.description_ar.trim() : null;
     if (data.price !== undefined) updatePayload.price = data.price;
     if (data.compare_at_price !== undefined) updatePayload.compare_at_price = data.compare_at_price || null;
     if (data.stock !== undefined) updatePayload.stock = data.stock;
     if (data.warranty !== undefined) updatePayload.warranty = data.warranty || null;
+    if (data.warranty_ar !== undefined) updatePayload.warranty_ar = data.warranty_ar ? data.warranty_ar.trim() : null;
     if (data.free_gift !== undefined) updatePayload.free_gift = data.free_gift || null;
+    if (data.free_gift_ar !== undefined) updatePayload.free_gift_ar = data.free_gift_ar ? data.free_gift_ar.trim() : null;
     if (data.badge_text !== undefined) updatePayload.badge_text = data.badge_text || null;
+    if (data.badge_text_ar !== undefined) updatePayload.badge_text_ar = data.badge_text_ar ? data.badge_text_ar.trim() : null;
     if (data.is_featured !== undefined) updatePayload.is_featured = Boolean(data.is_featured);
     if (data.is_best_deal !== undefined) updatePayload.is_best_deal = Boolean(data.is_best_deal);
     if (data.is_today_deal !== undefined) updatePayload.is_today_deal = Boolean(data.is_today_deal);
@@ -155,6 +248,10 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
     if (data.is_new_arrival !== undefined) updatePayload.is_new_arrival = Boolean(data.is_new_arrival);
     if (data.deal_ends_at !== undefined) updatePayload.deal_ends_at = data.deal_ends_at || null;
     if (data.specifications !== undefined) updatePayload.specifications = data.specifications || {};
+    if (data.specifications_ar !== undefined) updatePayload.specifications_ar = data.specifications_ar || null;
+    updatePayload.is_arabic_reviewed = reviewState.is_arabic_reviewed;
+    updatePayload.arabic_updated_at = reviewState.arabic_updated_at;
+    updatePayload.translation_metadata = reviewState.translation_metadata;
     if (data.is_active !== undefined) updatePayload.is_active = Boolean(data.is_active);
 
     const { error } = await supabase.from("products").update(updatePayload).eq("id", id);
@@ -199,6 +296,8 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
           cloudinary_public_id: img.cloudinary_public_id || null,
           is_primary: img.is_primary ?? idx === 0,
           display_order: img.display_order ?? idx + 1,
+          alt_text: img.alt_text || null,
+          alt_text_ar: img.alt_text_ar || null,
         }));
         const { error: insImgErr } = await supabase.from("product_images").insert(imagesToInsert);
         if (insImgErr) throw insImgErr;
@@ -214,6 +313,7 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
         const variantsToInsert = data.variants.map((v) => ({
           product_id: id,
           name: v.name,
+          name_ar: v.name_ar?.trim() || null,
           sku: v.sku || null,
           price: v.price || null,
           compare_at_price: v.compare_at_price || null,
@@ -231,12 +331,12 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
       .eq("id", id)
       .single();
 
-    revalidatePath("/");
-    revalidatePath("/shop");
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/shop");
     if (updatedProduct?.slug) {
-      revalidatePath(`/products/${updatedProduct.slug}`);
+      revalidateStorefrontPath(`/products/${updatedProduct.slug}`);
     } else if (data.slug) {
-      revalidatePath(`/products/${data.slug}`);
+      revalidateStorefrontPath(`/products/${data.slug}`);
     }
     revalidatePath("/admin");
     revalidatePath("/admin/products");
@@ -250,6 +350,10 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
 
 export async function deleteProductAction(id: string) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
     const supabase = createAdminClient();
 
     // 1. Find all product images to purge from Cloudinary
@@ -293,8 +397,8 @@ export async function deleteProductAction(id: string) {
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (error) throw error;
 
-    revalidatePath("/");
-    revalidatePath("/shop");
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/shop");
     revalidatePath("/admin");
     revalidatePath("/admin/products");
     return { success: true };
@@ -312,8 +416,8 @@ export async function toggleProductActiveAction(id: string, currentStatus: boole
       .eq("id", id);
     if (error) throw error;
 
-    revalidatePath("/");
-    revalidatePath("/shop");
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/shop");
     revalidatePath("/admin/products");
     return { success: true };
   } catch (err: unknown) {
@@ -327,14 +431,21 @@ export async function toggleProductActiveAction(id: string, currentStatus: boole
 
 export async function createBrandAction(data: {
   name: string;
+  name_ar?: string | null;
   slug: string;
   logo_url?: string;
   is_active?: boolean;
 }) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
+
     const supabase = createAdminClient();
     const { error } = await supabase.from("brands").insert({
       name: data.name.trim(),
+      name_ar: data.name_ar ? data.name_ar.trim() : null,
       slug: data.slug.trim(),
       logo_url: data.logo_url || null,
       is_active: data.is_active ?? true,
@@ -351,11 +462,23 @@ export async function createBrandAction(data: {
 
 export async function updateBrandAction(
   id: string,
-  data: { name?: string; slug?: string; logo_url?: string; is_active?: boolean }
+  data: { name?: string; name_ar?: string | null; slug?: string; logo_url?: string; is_active?: boolean }
 ) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
+
     const supabase = createAdminClient();
-    const { error } = await supabase.from("brands").update(data).eq("id", id);
+    const updatePayload: Record<string, unknown> = {};
+    if (data.name !== undefined) updatePayload.name = data.name.trim();
+    if (data.name_ar !== undefined) updatePayload.name_ar = data.name_ar ? data.name_ar.trim() : null;
+    if (data.slug !== undefined) updatePayload.slug = data.slug.trim();
+    if (data.logo_url !== undefined) updatePayload.logo_url = data.logo_url || null;
+    if (data.is_active !== undefined) updatePayload.is_active = data.is_active;
+
+    const { error } = await supabase.from("brands").update(updatePayload).eq("id", id);
     if (error) throw error;
 
     revalidatePath("/admin/brands");
@@ -418,19 +541,27 @@ export async function toggleBrandActiveAction(id: string, currentStatus: boolean
 
 export async function createCategoryAction(data: {
   name: string;
+  name_ar?: string | null;
   slug: string;
   description?: string;
+  description_ar?: string | null;
   image_url?: string;
   icon_name?: string;
   display_order?: number;
   is_active?: boolean;
 }) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
     const supabase = createAdminClient();
     const { error } = await supabase.from("categories").insert({
       name: data.name.trim(),
+      name_ar: data.name_ar?.trim() || null,
       slug: data.slug.trim(),
       description: data.description || null,
+      description_ar: data.description_ar?.trim() || null,
       image_url: data.image_url || null,
       icon_name: data.icon_name || null,
       display_order: data.display_order ?? 0,
@@ -438,9 +569,9 @@ export async function createCategoryAction(data: {
     });
     if (error) throw error;
 
-    revalidatePath("/");
-    revalidatePath("/shop");
-    revalidatePath("/categories");
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/shop");
+    revalidateStorefrontPath("/categories");
     revalidatePath("/admin/categories");
     return { success: true };
   } catch (err: unknown) {
@@ -452,8 +583,10 @@ export async function updateCategoryAction(
   id: string,
   data: {
     name?: string;
+    name_ar?: string | null;
     slug?: string;
     description?: string;
+    description_ar?: string | null;
     image_url?: string;
     icon_name?: string;
     display_order?: number;
@@ -461,16 +594,25 @@ export async function updateCategoryAction(
   }
 ) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
     const supabase = createAdminClient();
     const { error } = await supabase
       .from("categories")
-      .update({ ...data, updated_at: new Date().toISOString() })
+      .update({
+        ...data,
+        name_ar: data.name_ar !== undefined ? (data.name_ar?.trim() || null) : undefined,
+        description_ar: data.description_ar !== undefined ? (data.description_ar?.trim() || null) : undefined,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
     if (error) throw error;
 
-    revalidatePath("/");
-    revalidatePath("/shop");
-    revalidatePath("/categories");
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/shop");
+    revalidateStorefrontPath("/categories");
     revalidatePath("/admin/categories");
     return { success: true };
   } catch (err: unknown) {
@@ -480,6 +622,10 @@ export async function updateCategoryAction(
 
 export async function deleteCategoryAction(id: string) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
     const supabase = createAdminClient();
 
     // Purge category image from Cloudinary
@@ -500,9 +646,9 @@ export async function deleteCategoryAction(id: string) {
     const { error } = await supabase.from("categories").delete().eq("id", id);
     if (error) throw error;
 
-    revalidatePath("/");
-    revalidatePath("/shop");
-    revalidatePath("/categories");
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/shop");
+    revalidateStorefrontPath("/categories");
     revalidatePath("/admin/categories");
     return { success: true };
   } catch (err: unknown) {
@@ -516,11 +662,16 @@ export async function deleteCategoryAction(id: string) {
 
 export async function createBannerAction(data: {
   title?: string;
+  title_ar?: string | null;
   highlighted_text?: string | null;
+  highlighted_text_ar?: string | null;
   description?: string | null;
+  description_ar?: string | null;
   primary_cta_text?: string | null;
+  primary_cta_text_ar?: string | null;
   primary_cta_link?: string | null;
   secondary_cta_text?: string | null;
+  secondary_cta_text_ar?: string | null;
   secondary_cta_link?: string | null;
   desktop_image_url: string;
   mobile_image_url?: string | null;
@@ -530,14 +681,23 @@ export async function createBannerAction(data: {
   is_active?: boolean;
 }) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
     const supabase = createAdminClient();
     const { error } = await supabase.from("banners").insert({
       title: data.title?.trim() || "",
+      title_ar: data.title_ar?.trim() || null,
       highlighted_text: data.highlighted_text?.trim() || null,
+      highlighted_text_ar: data.highlighted_text_ar?.trim() || null,
       description: data.description?.trim() || null,
+      description_ar: data.description_ar?.trim() || null,
       primary_cta_text: data.primary_cta_text?.trim() || null,
+      primary_cta_text_ar: data.primary_cta_text_ar?.trim() || null,
       primary_cta_link: data.primary_cta_link?.trim() || null,
       secondary_cta_text: data.secondary_cta_text?.trim() || null,
+      secondary_cta_text_ar: data.secondary_cta_text_ar?.trim() || null,
       secondary_cta_link: data.secondary_cta_link?.trim() || null,
       desktop_image_url: data.desktop_image_url,
       mobile_image_url: data.mobile_image_url || null,
@@ -548,7 +708,7 @@ export async function createBannerAction(data: {
     });
     if (error) throw error;
 
-    revalidatePath("/");
+    revalidateStorefrontPath("/");
     revalidatePath("/admin/banners");
     return { success: true };
   } catch (err: unknown) {
@@ -560,11 +720,16 @@ export async function updateBannerAction(
   id: string,
   data: Partial<{
     title: string | null;
+    title_ar: string | null;
     highlighted_text: string | null;
+    highlighted_text_ar: string | null;
     description: string | null;
+    description_ar: string | null;
     primary_cta_text: string | null;
+    primary_cta_text_ar: string | null;
     primary_cta_link: string | null;
     secondary_cta_text: string | null;
+    secondary_cta_text_ar: string | null;
     secondary_cta_link: string | null;
     desktop_image_url: string;
     mobile_image_url: string | null;
@@ -575,14 +740,28 @@ export async function updateBannerAction(
   }>
 ) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
     const supabase = createAdminClient();
+    const updatePayload: Record<string, unknown> = {
+      ...data,
+      updated_at: new Date().toISOString(),
+    };
+    if (data.title_ar !== undefined) updatePayload.title_ar = data.title_ar?.trim() || null;
+    if (data.highlighted_text_ar !== undefined) updatePayload.highlighted_text_ar = data.highlighted_text_ar?.trim() || null;
+    if (data.description_ar !== undefined) updatePayload.description_ar = data.description_ar?.trim() || null;
+    if (data.primary_cta_text_ar !== undefined) updatePayload.primary_cta_text_ar = data.primary_cta_text_ar?.trim() || null;
+    if (data.secondary_cta_text_ar !== undefined) updatePayload.secondary_cta_text_ar = data.secondary_cta_text_ar?.trim() || null;
+
     const { error } = await supabase
       .from("banners")
-      .update({ ...data, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", id);
     if (error) throw error;
 
-    revalidatePath("/");
+    revalidateStorefrontPath("/");
     revalidatePath("/admin/banners");
     return { success: true };
   } catch (err: unknown) {
@@ -592,6 +771,10 @@ export async function updateBannerAction(
 
 export async function deleteBannerAction(id: string) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
     const supabase = createAdminClient();
 
     // Purge banner images from Cloudinary
@@ -619,7 +802,7 @@ export async function deleteBannerAction(id: string) {
     const { error } = await supabase.from("banners").delete().eq("id", id);
     if (error) throw error;
 
-    revalidatePath("/");
+    revalidateStorefrontPath("/");
     revalidatePath("/admin/banners");
     return { success: true };
   } catch (err: unknown) {
@@ -672,18 +855,46 @@ export async function deleteOrderAction(orderId: string) {
 
 export async function updateSiteSettingsAction(settings: Partial<SiteSettings>) {
   try {
+    const session = await getAdminSession();
+    if (!session) {
+      return { success: false, error: "Unauthorized: Admin session required." };
+    }
+
     const supabase = createAdminClient();
-    const { error } = await supabase.from("site_settings").upsert({
+    const nowIso = new Date().toISOString();
+
+    // 1. Upsert into "general" settings
+    const { error: genErr } = await supabase.from("site_settings").upsert({
       key: "general",
       value: settings,
       is_public: true,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     });
-    if (error) throw error;
+    if (genErr) throw genErr;
 
-    revalidatePath("/");
-    revalidatePath("/checkout");
-    revalidatePath("/cart");
+    // 2. If announcement_bar is provided, also upsert dedicated key for compatibility
+    if (settings.announcement_bar) {
+      await supabase.from("site_settings").upsert({
+        key: "announcement_bar",
+        value: settings.announcement_bar,
+        is_public: true,
+        updated_at: nowIso,
+      });
+    }
+
+    // 3. If trust_badges is provided, also upsert dedicated key for compatibility
+    if (settings.trust_badges) {
+      await supabase.from("site_settings").upsert({
+        key: "trust_badges",
+        value: settings.trust_badges,
+        is_public: true,
+        updated_at: nowIso,
+      });
+    }
+
+    revalidateStorefrontPath("/");
+    revalidateStorefrontPath("/checkout");
+    revalidateStorefrontPath("/cart");
     revalidatePath("/admin/settings");
     return { success: true };
   } catch (err: unknown) {
@@ -881,7 +1092,7 @@ export async function seedInitialDataAction() {
       const { image_url, ...productFields } = p;
       const { data: insertedProduct, error: pError } = await supabase
         .from("products")
-        .upsert(productFields as any, { onConflict: "slug" })
+        .upsert(productFields as unknown as Parameters<typeof supabase.from>[0], { onConflict: "slug" })
         .select("id")
         .single();
 
@@ -898,7 +1109,7 @@ export async function seedInitialDataAction() {
       }
     }
 
-    revalidatePath("/");
+    revalidateStorefrontPath("/");
     revalidatePath("/admin");
     return { success: true };
   } catch (err: unknown) {

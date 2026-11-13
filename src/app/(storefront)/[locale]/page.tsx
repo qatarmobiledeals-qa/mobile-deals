@@ -23,26 +23,44 @@ import { MobileBottomNav } from "@/components/store/mobile-bottom-nav";
 // Updates occur automatically on admin changes via on-demand revalidatePath.
 export const revalidate = 86400; // 24 hours
 
-export const metadata: Metadata = {
-  alternates: {
-    canonical: "https://mobiledealsqa.com",
-  },
-  openGraph: {
-    title: "Mobile Deals Qatar | Best Tech Deals & Cash on Delivery",
-    description:
-      "Qatar's premier store for mobiles, electronics, smartwatches, accessories and gadgets. Unbeatable prices, 100% genuine tech, Cash on Delivery nationwide.",
-    url: "https://mobiledealsqa.com",
-    type: "website",
-    images: [
-      {
-        url: "https://mobiledealsqa.com/fav-icon.png",
-        alt: "Mobile Deals Qatar",
-        width: 512,
-        height: 512,
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const isArabic = locale === "ar";
+  const baseUrl = "https://mobiledealsqa.com";
+
+  return {
+    alternates: {
+      canonical: `${baseUrl}/${locale}`,
+      languages: {
+        en: `${baseUrl}/en`,
+        ar: `${baseUrl}/ar`,
+        "x-default": `${baseUrl}/en`,
       },
-    ],
-  },
-};
+    },
+    openGraph: {
+      title: isArabic
+        ? "موبايل ديلز قطر | أفضل عروض الهواتف والإلكترونيات والدفع عند الاستلام"
+        : "Mobile Deals Qatar | Best Tech Deals & Cash on Delivery",
+      description: isArabic
+        ? "المتجر الرائد في قطر للهواتف والإلكترونيات والساعات الذكية والإكسسوارات. أفضل الأسعار، منتجات أصلية، والدفع عند الاستلام."
+        : "Qatar's premier store for mobiles, electronics, smartwatches, accessories and gadgets. Unbeatable prices, 100% genuine tech, Cash on Delivery nationwide.",
+      url: `${baseUrl}/${locale}`,
+      type: "website",
+      images: [
+        {
+          url: "https://mobiledealsqa.com/fav-icon.png",
+          alt: "Mobile Deals Qatar",
+          width: 512,
+          height: 512,
+        },
+      ],
+    },
+  };
+}
 
 export default async function HomePage() {
   // Efficient parallel data fetching: single round-trip execution
