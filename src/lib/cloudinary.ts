@@ -12,13 +12,15 @@ const TRANSFORMATION_PRESETS: Record<ImageSize, string> = {
   thumb: "c_limit,w_160,h_160,f_auto,q_auto",
   card: "c_pad,w_400,h_400,b_white,f_auto,q_auto",
   detail: "c_pad,w_800,h_800,b_white,f_auto,q_auto",
-  hero_desktop: "c_fill,w_1400,h_600,f_auto,q_auto",
-  hero_mobile: "c_fill,w_600,h_500,f_auto,q_auto",
+  hero_desktop: "", // Hero banners are served uncompressed with 100% full original clarity
+  hero_mobile: "",
 };
 
 /**
  * Transforms an image URL or Cloudinary public ID into an optimized Cloudinary delivery URL.
  * If the URL is already an external URL (e.g., Unsplash), it handles it cleanly.
+ * NOTE: Hero banners (hero_desktop and hero_mobile) are explicitly exempted from lossy
+ * Cloudinary compression and downscaling to maintain 100% crisp admin-uploaded clarity.
  */
 export function getOptimizedImageUrl(
   src: string | null | undefined,
@@ -26,6 +28,19 @@ export function getOptimizedImageUrl(
 ): string {
   if (!src) {
     return "/images/placeholder.svg";
+  }
+
+  // Hero banners: DO NOT compress on Cloudinary — deliver full original clarity
+  if (preset === "hero_desktop" || preset === "hero_mobile") {
+    // If it's a Cloudinary URL that previously had transformation parameters injected, remove them
+    if (src.includes("res.cloudinary.com") && src.includes("/upload/")) {
+      return src.replace(/\/upload\/(?:[a-z]_[a-zA-Z0-9_,-]+,?)+\//, "/upload/");
+    }
+    // If it's a raw Cloudinary public ID
+    if (!src.startsWith("http://") && !src.startsWith("https://") && !src.startsWith("/")) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${src}`;
+    }
+    return src;
   }
 
   // If it's a Cloudinary URL already, inject transformation parameters

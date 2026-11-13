@@ -195,7 +195,7 @@ export function HeroSection({
               <button
                 onClick={handlePrev}
                 aria-label="Previous Banner"
-                className="hidden sm:flex absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-black/40 hover:bg-black/75 text-white backdrop-blur-md border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
+                className="hidden sm:flex absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-neutral-950/70 hover:bg-neutral-950 text-white border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
               >
                 <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
@@ -203,13 +203,13 @@ export function HeroSection({
               <button
                 onClick={handleNext}
                 aria-label="Next Banner"
-                className="hidden sm:flex absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-black/40 hover:bg-black/75 text-white backdrop-blur-md border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
+                className="hidden sm:flex absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-neutral-950/70 hover:bg-neutral-950 text-white border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
               >
                 <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
 
-              {/* Indicator Dots */}
-              <div className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 bg-black/30 backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/10">
+              {/* Indicator Dots: right-aligned on mobile to not obstruct bottom-left buttons, centered on desktop */}
+              <div className="absolute bottom-3.5 sm:bottom-6 right-3.5 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 bg-neutral-950/70 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/15">
                 {activeBanners.map((_, idx) => (
                   <button
                     key={idx}

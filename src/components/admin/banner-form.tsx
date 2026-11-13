@@ -66,6 +66,9 @@ export function BannerForm({
   const [desktopImageUrl, setDesktopImageUrl] = useState(
     banner?.desktop_image_url || ""
   );
+  const [desktopPublicId, setDesktopPublicId] = useState<string | null>(
+    banner?.cloudinary_public_id || null
+  );
   const [mobileImageUrl, setMobileImageUrl] = useState(
     banner?.mobile_image_url || ""
   );
@@ -95,6 +98,7 @@ export function BannerForm({
         secondary_cta_link: secondaryCtaLink?.trim() || null,
         desktop_image_url: desktopImageUrl.trim(),
         mobile_image_url: mobileImageUrl?.trim() || null,
+        cloudinary_public_id: desktopPublicId,
         position: "hero",
         display_order: parseInt(displayOrder) || 1,
         is_active: isActive,
@@ -202,12 +206,19 @@ export function BannerForm({
                         </label>
                         <ImageUploader
                           value={desktopImageUrl}
-                          onChange={setDesktopImageUrl}
+                          onChange={(url, publicId) => {
+                            setDesktopImageUrl(url);
+                            if (publicId) setDesktopPublicId(publicId);
+                          }}
                           label="Upload Desktop Banner"
                           folder="mobile-deals/banners"
+                          compress={false}
                         />
+                        <p className="text-[11px] text-emerald-400/90 font-medium">
+                          ✨ Full Clarity HD: Banner is uploaded at original 100% resolution with zero compression.
+                        </p>
                         <p className="text-[11px] text-neutral-500">
-                          Recommended: 1920x600px or 16:9 ratio. Used on desktop, laptop, and tablet screens.
+                          Recommended: 1920x600px (16:5 or 16:9 ratio). Used on desktop, laptop, and tablet screens.
                         </p>
                       </div>
 
@@ -218,10 +229,14 @@ export function BannerForm({
                         </label>
                         <ImageUploader
                           value={mobileImageUrl}
-                          onChange={setMobileImageUrl}
+                          onChange={(url) => setMobileImageUrl(url)}
                           label="Upload Mobile Banner (Optional)"
                           folder="mobile-deals/banners"
+                          compress={false}
                         />
+                        <p className="text-[11px] text-emerald-400/90 font-medium">
+                          ✨ Full Clarity HD: Mobile banner is uploaded at original 100% resolution with zero compression.
+                        </p>
                         <p className="text-[11px] text-neutral-500">
                           Recommended: 800x600px or 4:3 ratio. Optimizes display and loading speed on mobile devices.
                         </p>
