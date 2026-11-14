@@ -1,31 +1,47 @@
 /**
  * Locale-aware formatting utilities for Qatar Mobiles
  * Adheres to conventional internationalization using standard Intl APIs.
- * Supports English (en-QA) and Arabic (ar-QA) without external services.
+ * Uses Western Arabic numerals (0-9) across English (en-QA) and Arabic (ar-QA-u-nu-latn)
+ * for clear e-commerce pricing readability in Qatar without external services.
  */
 
-export function formatPrice(amount: number | null | undefined, locale: string = "en"): string {
+export function formatPrice(
+  amount: number | null | undefined,
+  locale: string = "en",
+  currency: string = "QAR"
+): string {
   const numericAmount = typeof amount === "number" && !isNaN(amount) ? amount : 0;
   const isArabic = locale === "ar";
+  const resolvedCurrency = currency?.trim() || "QAR";
 
-  const formattedNumber = new Intl.NumberFormat(isArabic ? "ar-QA" : "en-QA", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(numericAmount);
+  const formattedNumber = new Intl.NumberFormat(
+    isArabic ? "ar-QA-u-nu-latn" : "en-QA",
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }
+  ).format(numericAmount);
 
-  return isArabic ? `${formattedNumber} ر.ق` : `${formattedNumber} QAR`;
+  if (isArabic) {
+    const arCurrencyLabel = resolvedCurrency === "QAR" ? "ر.ق" : resolvedCurrency;
+    return `${formattedNumber} ${arCurrencyLabel}`;
+  }
+
+  return `${resolvedCurrency} ${formattedNumber}`;
 }
 
 export function formatCurrency(
   amount: number | null | undefined,
-  locale: string = "en"
+  locale: string = "en",
+  currency: string = "QAR"
 ): string {
   const numericAmount = typeof amount === "number" && !isNaN(amount) ? amount : 0;
   const isArabic = locale === "ar";
+  const resolvedCurrency = currency?.trim() || "QAR";
 
-  return new Intl.NumberFormat(isArabic ? "ar-QA" : "en-QA", {
+  return new Intl.NumberFormat(isArabic ? "ar-QA-u-nu-latn" : "en-QA", {
     style: "currency",
-    currency: "QAR",
+    currency: resolvedCurrency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(numericAmount);
@@ -39,7 +55,10 @@ export function formatNumber(
   const numericVal = typeof value === "number" && !isNaN(value) ? value : 0;
   const isArabic = locale === "ar";
 
-  return new Intl.NumberFormat(isArabic ? "ar-QA" : "en-QA", options).format(numericVal);
+  return new Intl.NumberFormat(
+    isArabic ? "ar-QA-u-nu-latn" : "en-QA",
+    options
+  ).format(numericVal);
 }
 
 export function formatDate(

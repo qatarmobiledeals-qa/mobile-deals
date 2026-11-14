@@ -17,6 +17,9 @@ export interface Category {
   icon_name: string | null;
   display_order: number;
   is_active: boolean;
+  is_arabic_reviewed?: boolean;
+  arabic_updated_at?: string | null;
+  translation_metadata?: TranslationMetadata | null;
   created_at: string;
   updated_at: string;
 }
@@ -127,6 +130,9 @@ export interface Banner {
   position: string;
   display_order: number;
   is_active: boolean;
+  is_arabic_reviewed?: boolean;
+  arabic_updated_at?: string | null;
+  translation_metadata?: TranslationMetadata | null;
   created_at: string;
   updated_at: string;
 }
