@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, usePathname } from "@/i18n/navigation";
+import { useTranslations } from "next-intl";
 import { Home, ShoppingBag, LayoutGrid, ShoppingCart } from "lucide-react";
 import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import { useCart } from "@/hooks/use-cart";
@@ -24,39 +24,40 @@ export function MobileBottomNav({
   whatsappNumber = "+97455000000",
 }: MobileBottomNavProps) {
   const pathname = usePathname();
+  const t = useTranslations("mobileNav");
   const { totalItems } = useCart();
   const whatsappCleanNumber = whatsappNumber.replace(/[^\d]/g, "");
 
   const navItems: NavItem[] = [
     {
-      label: "Home",
+      label: t("home"),
       href: "/",
       icon: Home,
       isActive: pathname === "/",
     },
     {
-      label: "Shop",
+      label: t("shop"),
       href: "/shop",
       icon: ShoppingBag,
       isActive: pathname.startsWith("/shop") || pathname.startsWith("/products"),
     },
     {
-      label: "Categories",
+      label: t("categories"),
       href: "/#categories",
       icon: LayoutGrid,
       isActive: pathname.startsWith("/categories"),
     },
     {
-      label: "WhatsApp",
+      label: t("whatsapp"),
       href: `https://wa.me/${whatsappCleanNumber}?text=${encodeURIComponent(
-        "Hello Mobile Deals 👋 I would like to inquire about your products."
+        t("whatsappMessage")
       )}`,
       icon: WhatsAppIcon,
       isActive: false,
       isExternal: true,
     },
     {
-      label: "Cart",
+      label: t("cart"),
       href: "/cart",
       icon: ShoppingCart,
       isActive: pathname === "/cart",
@@ -97,7 +98,7 @@ export function MobileBottomNav({
               <div className="relative">
                 <Icon className={`w-5 h-5 ${isCurrent ? "stroke-[2.5]" : ""}`} />
                 {item.badge !== undefined && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-2 bg-[#8A1538] text-white text-[9px] font-bold h-3.5 min-w-3.5 px-0.5 rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -end-2 bg-[#8A1538] text-white text-[9px] font-bold h-3.5 min-w-3.5 px-0.5 rounded-full flex items-center justify-center">
                     {item.badge}
                   </span>
                 )}

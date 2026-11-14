@@ -3,8 +3,11 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-const ADMIN_COOKIE_NAME = "md_admin_session";
+import {
+  signAdminPayload,
+  verifyAdminToken,
+  ADMIN_COOKIE_NAME,
+} from "@/lib/auth/admin-session";
 
 export async function adminLoginAction(formData: FormData) {
   const email = formData.get("email") as string;
@@ -33,13 +36,15 @@ export async function adminLoginAction(formData: FormData) {
       };
     }
 
-    const cookieStore = await cookies();
-    cookieStore.set(ADMIN_COOKIE_NAME, JSON.stringify({
+    const signedToken = signAdminPayload({
       email: authData.user?.email || cleanEmail,
       id: authData.user?.id || "admin",
       role: "admin",
       loggedAt: new Date().toISOString(),
-    }), {
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set(ADMIN_COOKIE_NAME, signedToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -60,12 +65,12 @@ export async function adminLogoutAction() {
 }
 
 export async function getAdminSession() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(ADMIN_COOKIE_NAME);
-  if (!sessionCookie?.value) return null;
-
   try {
-    return JSON.parse(sessionCookie.value);
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get(ADMIN_COOKIE_NAME);
+    if (!sessionCookie?.value) return null;
+
+    return verifyAdminToken(sessionCookie.value);
   } catch {
     return null;
   }

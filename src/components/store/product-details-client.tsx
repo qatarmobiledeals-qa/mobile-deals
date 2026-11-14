@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import Image from "next/image";
+import { useLocale, useTranslations } from "next-intl";
 import { Product, ProductVariant } from "@/types/database";
+import { resolveProductContent } from "@/lib/i18n/content-resolver";
+import { formatPrice } from "@/lib/formatters";
 import { useCart } from "@/hooks/use-cart";
 import { generateProductWhatsAppUrl } from "@/lib/whatsapp";
 import {
@@ -31,41 +34,47 @@ export function ProductDetailsClient({
   currency = "QAR",
 }: ProductDetailsClientProps) {
   const router = useRouter();
+  const locale = useLocale();
+  const tProduct = useTranslations("product");
   const { addItem } = useCart();
 
-  const variants = product.product_variants || [];
+  const resolvedProduct = resolveProductContent(product, locale);
+  const resolvedVariants = resolvedProduct.product_variants;
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
     () => {
-      if (variants.length === 0) return null;
+      if (resolvedVariants.length === 0) return null;
       // Default to the first in-stock variant if available
-      const firstInStock = variants.find((v) => (v.stock ?? 0) > 0);
-      return firstInStock || variants[0];
+      const firstInStock = resolvedVariants.find((v) => (v.stock ?? 0) > 0);
+      return firstInStock || resolvedVariants[0];
     }
   );
+  const resolvedSelectedVariant = selectedVariant
+    ? resolvedVariants.find((v) => v.id === selectedVariant.id) ?? resolvedVariants[0] ?? null
+    : null;
   const [quantity, setQuantity] = useState(1);
   const [addedToast, setAddedToast] = useState(false);
 
   // Stock calculations for currently selected variant or main product
-  const currentStock = selectedVariant
-    ? (selectedVariant.stock ?? 0)
+  const currentStock = resolvedSelectedVariant
+    ? (resolvedSelectedVariant.stock ?? 0)
     : (product.stock ?? 0);
   const isOutOfStock = currentStock <= 0;
   const isLowStock = currentStock > 0 && currentStock <= 5;
 
-  const currentPrice = selectedVariant?.price ?? product.price;
-  const comparePrice = selectedVariant?.compare_at_price ?? product.compare_at_price;
+  const currentPrice = resolvedSelectedVariant?.price ?? product.price;
+  const comparePrice = resolvedSelectedVariant?.compare_at_price ?? product.compare_at_price;
   const hasDiscount = comparePrice && comparePrice > currentPrice;
   const discountPercent = hasDiscount
     ? Math.round(((comparePrice - currentPrice) / comparePrice) * 100)
     : 0;
 
   const primaryImage =
-    product.product_images?.find((img) => img.is_primary)?.image_url ||
-    product.product_images?.[0]?.image_url ||
+    resolvedProduct.product_images?.find((img) => img.is_primary)?.image_url ||
+    resolvedProduct.product_images?.[0]?.image_url ||
     "";
 
   // Free gift data
-  const giftName = product.free_gift?.trim() || "";
+  const giftName = resolvedProduct.displayFreeGift?.trim() || "";
   const giftImage = product.specifications?.gift_image?.trim() || "";
   const isGiftEnabled =
     product.specifications?.gift_enabled !== "false" &&
@@ -76,10 +85,10 @@ export function ProductDetailsClient({
     addItem(
       {
         productId: product.id,
-        productName: product.name,
+        productName: resolvedProduct.displayName,
         productSlug: product.slug,
-        variantId: selectedVariant?.id,
-        variantName: selectedVariant?.name,
+        variantId: resolvedSelectedVariant?.id,
+        variantName: resolvedSelectedVariant?.displayName,
         price: currentPrice,
         imageUrl: primaryImage,
       },
@@ -93,10 +102,10 @@ export function ProductDetailsClient({
     if (isOutOfStock) return;
     const directItem = {
       productId: product.id,
-      productName: product.name,
+      productName: resolvedProduct.displayName,
       productSlug: product.slug,
-      variantId: selectedVariant?.id,
-      variantName: selectedVariant?.name,
+      variantId: resolvedSelectedVariant?.id,
+      variantName: resolvedSelectedVariant?.displayName,
       price: currentPrice,
       imageUrl: primaryImage,
       quantity: quantity,
@@ -109,16 +118,18 @@ export function ProductDetailsClient({
     router.push("/checkout?direct=1");
   };
 
+  const productEnquiryLabel = `${resolvedProduct.displayName}${
+    resolvedSelectedVariant?.displayName ? ` (${resolvedSelectedVariant.displayName})` : ""
+  }`;
+
   const whatsAppUrl = isOutOfStock
     ? `https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(
-        `Hi Mobile Deals Qatar, I would like to enquire about stock availability for ${product.name}${
-          selectedVariant?.name ? ` (${selectedVariant.name})` : ""
-        }. When will this item be back in stock?`
+        tProduct("stockEnquiryWhatsappMessage", { product: productEnquiryLabel })
       )}`
     : generateProductWhatsAppUrl({
         storeNumber: whatsappNumber,
-        productName: product.name,
-        variantName: selectedVariant?.name,
+        productName: resolvedProduct.displayName,
+        variantName: resolvedSelectedVariant?.displayName,
         price: currentPrice,
         quantity: quantity,
         currency: currency,
@@ -128,20 +139,20 @@ export function ProductDetailsClient({
     <div className="flex flex-col gap-5 w-full min-w-0 max-w-full">
       {/* ── Brand + badges row ── */}
       <div className="flex items-center flex-wrap gap-2">
-        {product.brand && (
+        {resolvedProduct.displayBrandName && (
           <span className="px-2.5 py-1 bg-neutral-100 rounded-lg text-xs font-bold text-neutral-600 uppercase tracking-wider">
-            {product.brand.name}
+            {resolvedProduct.displayBrandName}
           </span>
         )}
         {isGiftEnabled && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/80 rounded-full text-xs font-black uppercase tracking-wider">
             <Gift className="w-3.5 h-3.5 text-amber-600" />
-            {giftName || "Free Gift"}
+            {giftName || tProduct("freeGiftBadge")}
           </span>
         )}
-        {!isGiftEnabled && product.badge_text && (
+        {!isGiftEnabled && resolvedProduct.displayBadgeText && (
           <span className="px-2.5 py-1 bg-rose-50 text-[#8A1538] border border-rose-200/80 rounded-full text-xs font-bold uppercase tracking-wider">
-            {product.badge_text}
+            {resolvedProduct.displayBadgeText}
           </span>
         )}
       </div>
@@ -149,11 +160,11 @@ export function ProductDetailsClient({
       {/* ── Product name + short description ── */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-black text-neutral-900 tracking-tight leading-tight">
-          {product.name}
+          {resolvedProduct.displayName}
         </h1>
-        {product.short_description && (
+        {resolvedProduct.displayShortDescription && (
           <p className="text-sm text-neutral-500 mt-2 leading-relaxed">
-            {product.short_description}
+            {resolvedProduct.displayShortDescription}
           </p>
         )}
       </div>
@@ -162,15 +173,15 @@ export function ProductDetailsClient({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-neutral-50 border border-neutral-200/60">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-3xl sm:text-4xl font-black text-[#8A1538] tracking-tight">
-            {currency} {currentPrice.toLocaleString()}
+            {formatPrice(currentPrice, locale, currency)}
           </span>
           {hasDiscount && (
             <>
               <span className="text-base text-neutral-400 line-through">
-                {currency} {comparePrice.toLocaleString()}
+                {formatPrice(comparePrice, locale, currency)}
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
-                Save {discountPercent}%
+                {tProduct("savePercent", { percent: discountPercent })}
               </span>
             </>
           )}
@@ -181,38 +192,38 @@ export function ProductDetailsClient({
           {isOutOfStock ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span>Out of Stock</span>
+              <span>{tProduct("outOfStock")}</span>
             </span>
           ) : isLowStock ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <span>Only {currentStock} left in stock</span>
+              <span>{tProduct("onlyLeftInStock", { count: currentStock })}</span>
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>In Stock</span>
+              <span>{tProduct("inStock")}</span>
             </span>
           )}
         </div>
       </div>
 
       {/* ── Variant selector ── */}
-      {variants.length > 0 && (
+      {resolvedVariants.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase text-neutral-500 tracking-wider">
-              Select Model / Variant
+              {tProduct("selectModelVariant")}
             </p>
-            {selectedVariant && (
+            {resolvedSelectedVariant && (
               <span className="text-xs text-neutral-500">
-                Selected: <strong className="text-neutral-900">{selectedVariant.name}</strong>
+                {tProduct("selected")} <strong className="text-neutral-900">{resolvedSelectedVariant.displayName}</strong>
               </span>
             )}
           </div>
           <div className="flex flex-wrap gap-2.5">
-            {variants.map((variant) => {
-              const isSelected = selectedVariant?.id === variant.id;
+            {resolvedVariants.map((variant) => {
+              const isSelected = resolvedSelectedVariant?.id === variant.id;
               const isVarOutOfStock = (variant.stock ?? 0) <= 0;
               return (
                 <button
@@ -233,16 +244,16 @@ export function ProductDetailsClient({
                   }`}
                 >
                   <span className={isVarOutOfStock ? "line-through opacity-75" : ""}>
-                    {variant.name}
+                    {variant.displayName}
                   </span>
                   {isVarOutOfStock ? (
                     <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">
-                      Out of Stock
+                      {tProduct("outOfStock")}
                     </span>
                   ) : (
                     (variant.stock ?? 0) <= 5 && (
                       <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                        {variant.stock} left
+                        {tProduct("leftCount", { count: variant.stock ?? 0 })}
                       </span>
                     )
                   )}
@@ -256,11 +267,11 @@ export function ProductDetailsClient({
       {/* ── Quantity + Add to Cart — same row ── */}
       <div className="space-y-2 w-full">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase text-neutral-500 tracking-wider">Quantity</span>
+          <span className="text-xs font-bold uppercase text-neutral-500 tracking-wider">{tProduct("quantity")}</span>
           {isOutOfStock ? (
-            <span className="text-xs font-bold text-rose-600">Currently unavailable</span>
+            <span className="text-xs font-bold text-rose-600">{tProduct("currentlyUnavailable")}</span>
           ) : isLowStock ? (
-            <span className="text-xs font-semibold text-amber-700">Max available: {currentStock}</span>
+            <span className="text-xs font-semibold text-amber-700">{tProduct("maxAvailable", { count: currentStock })}</span>
           ) : null}
         </div>
         <div className="flex items-center gap-2.5 sm:gap-3 w-full">
@@ -273,7 +284,7 @@ export function ProductDetailsClient({
               disabled={isOutOfStock || quantity <= 1}
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               className="px-2.5 sm:px-3 py-2.5 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Decrease quantity"
+              aria-label={tProduct("decreaseQuantity")}
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
@@ -285,7 +296,7 @@ export function ProductDetailsClient({
               disabled={isOutOfStock || quantity >= currentStock}
               onClick={() => setQuantity((q) => Math.min(currentStock, q + 1))}
               className="px-2.5 sm:px-3 py-2.5 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Increase quantity"
+              aria-label={tProduct("increaseQuantity")}
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -307,17 +318,17 @@ export function ProductDetailsClient({
             {isOutOfStock ? (
               <>
                 <AlertCircle className="w-4 h-4 text-neutral-400" />
-                <span>Out of Stock</span>
+                <span>{tProduct("outOfStock")}</span>
               </>
             ) : addedToast ? (
               <>
                 <Check className="w-4 h-4 text-emerald-200" />
-                <span>Added to Cart!</span>
+                <span>{tProduct("addedToCart")}</span>
               </>
             ) : (
               <>
                 <ShoppingCart className="w-4 h-4" />
-                <span>Add to Cart</span>
+                <span>{tProduct("addToCart")}</span>
               </>
             )}
           </button>
@@ -336,7 +347,7 @@ export function ProductDetailsClient({
               : "bg-neutral-900 hover:bg-neutral-800 text-white hover:shadow-md active:scale-[0.99] cursor-pointer"
           }`}
         >
-          <span>{isOutOfStock ? "Out of Stock" : "Cash on Delivery"}</span>
+          <span>{isOutOfStock ? tProduct("outOfStock") : tProduct("cashOnDelivery")}</span>
         </button>
 
         <a
@@ -350,19 +361,19 @@ export function ProductDetailsClient({
           }`}
         >
           <WhatsAppIcon className="w-4 h-4 fill-white shrink-0" />
-          <span>{isOutOfStock ? "Enquire on WhatsApp" : "Order via WhatsApp"}</span>
+          <span>{isOutOfStock ? tProduct("enquireOnWhatsApp") : tProduct("orderWhatsApp")}</span>
         </a>
       </div>
 
       {/* ── Free Gift card ── */}
       {isGiftEnabled && (
-        <div className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80">
+        <div className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r rtl:bg-gradient-to-l from-amber-50 to-orange-50 border border-amber-200/80">
           {/* Gift image */}
           {giftImage ? (
             <div className="relative w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-white border border-amber-100 shadow-xs">
               <Image
                 src={giftImage}
-                alt={giftName || "Free Gift"}
+                alt={giftName || tProduct("freeGiftBadge")}
                 fill
                 sizes="64px"
                 className="object-contain p-1"
@@ -378,14 +389,14 @@ export function ProductDetailsClient({
             <div className="flex items-center gap-1.5 mb-0.5">
               <Gift className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span className="text-[10px] font-black uppercase tracking-widest text-amber-700">
-                Free Gift Included
+                {tProduct("freeGift")}
               </span>
             </div>
             {giftName && (
               <p className="text-sm font-bold text-neutral-900 truncate">{giftName}</p>
             )}
             <p className="text-xs text-emerald-700 font-semibold mt-0.5">
-              ✓ Complimentary with this product
+              {tProduct("complimentaryWithProduct")}
             </p>
           </div>
         </div>
@@ -395,15 +406,15 @@ export function ProductDetailsClient({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-neutral-600">
         <div className="flex items-center gap-2.5 p-3 rounded-xl bg-neutral-50 border border-neutral-200/60">
           <Truck className="w-4 h-4 text-[#8A1538] shrink-0" />
-          <span><strong>Fast Delivery</strong><br className="hidden sm:block" /> 24–48 hrs Qatar</span>
+          <span><strong>{tProduct("fastDeliveryLabel")}</strong><br className="hidden sm:block" /> {tProduct("fastDelivery24_48")}</span>
         </div>
         <div className="flex items-center gap-2.5 p-3 rounded-xl bg-neutral-50 border border-neutral-200/60">
           <ShieldCheck className="w-4 h-4 text-[#8A1538] shrink-0" />
-          <span><strong>Warranty</strong><br className="hidden sm:block" /> {product.warranty || "1 Year Official"}</span>
+          <span><strong>{tProduct("warranty")}</strong><br className="hidden sm:block" /> {resolvedProduct.displayWarranty || tProduct("oneYearOfficial")}</span>
         </div>
         <div className="flex items-center gap-2.5 p-3 rounded-xl bg-neutral-50 border border-neutral-200/60">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span><strong>100% Genuine</strong><br className="hidden sm:block" /> Sealed original unit</span>
+          <span><strong>{tProduct("genuine100")}</strong><br className="hidden sm:block" /> {tProduct("sealedOriginal")}</span>
         </div>
       </div>
     </div>

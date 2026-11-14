@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
+import { useTranslations } from "next-intl";
 import { Product } from "@/types/database";
 import { ProductCard } from "@/components/store/product-card";
 import { ArrowRight } from "lucide-react";
@@ -13,6 +16,9 @@ export function FeaturedSection({
   products = [],
   currency = "QAR",
 }: FeaturedSectionProps) {
+  const tHome = useTranslations("home");
+  const tCommon = useTranslations("common");
+
   if (products.length === 0) return null;
 
   const visibleProducts = products.slice(0, 10);
@@ -25,7 +31,7 @@ export function FeaturedSection({
             <span className="w-1.5 h-5 sm:h-6 bg-[#8A1538] rounded-full inline-block" />
             <div>
               <h2 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-neutral-900">
-                Featured Gear
+                {tHome("featuredGear")}
               </h2>
             </div>
           </div>
@@ -34,8 +40,8 @@ export function FeaturedSection({
             href="/products"
             className="group inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-[#8A1538] hover:text-[#6e132d] transition-colors"
           >
-            <span>View All</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            <span>{tCommon("viewAll")}</span>
+            <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180 group-hover:translate-x-1 rtl:group-hover:-translate-x-1 transition-transform" />
           </Link>
         </div>
 
@@ -56,8 +62,8 @@ export function FeaturedSection({
               href="/products"
               className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#8A1538] text-white text-sm font-bold rounded-xl shadow hover:bg-[#720e2c] active:scale-95 transition-all"
             >
-              <span>View All Featured</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>{tHome("viewAllFeatured")}</span>
+              <ArrowRight className="w-4 h-4 rtl:rotate-180" />
             </Link>
           </div>
         </div>

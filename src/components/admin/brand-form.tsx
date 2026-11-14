@@ -33,6 +33,7 @@ export function BrandForm({
   const isEditing = Boolean(brand?.id);
 
   const [name, setName] = useState(brand?.name || "");
+  const [nameAr, setNameAr] = useState(brand?.name_ar || "");
   const [slug, setSlug] = useState(brand?.slug || "");
   const [logoUrl, setLogoUrl] = useState(brand?.logo_url || "");
   const [isActive, setIsActive] = useState(brand?.is_active ?? true);
@@ -63,6 +64,7 @@ export function BrandForm({
       if (isEditing && brand?.id) {
         res = await updateBrandAction(brand.id, {
           name,
+          name_ar: nameAr.trim() || null,
           slug,
           logo_url: logoUrl || undefined,
           is_active: isActive,
@@ -70,6 +72,7 @@ export function BrandForm({
       } else {
         res = await createBrandAction({
           name,
+          name_ar: nameAr.trim() || null,
           slug,
           logo_url: logoUrl || undefined,
           is_active: isActive,
@@ -160,7 +163,7 @@ export function BrandForm({
                     <div className="space-y-4">
                       <div className="space-y-1.5">
                         <label className="font-semibold text-neutral-300 block text-xs">
-                          Brand Name *
+                          Brand Name (Latin) *
                         </label>
                         <input
                           type="text"
@@ -169,6 +172,21 @@ export function BrandForm({
                           onChange={(e) => handleNameChange(e.target.value)}
                           placeholder="e.g. Apple, Samsung, Anker, JBL"
                           className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Brand Name (Optional - اسم العلامة التجارية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="rtl"
+                          value={nameAr}
+                          onChange={(e) => setNameAr(e.target.value)}
+                          placeholder="مثال: أبل، سامسونج (اتركه فارغاً للاحتفاظ بالاسم الأصلي)"
+                          className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
                         />
                       </div>
 

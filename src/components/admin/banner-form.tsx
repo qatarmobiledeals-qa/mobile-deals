@@ -2,7 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createBannerAction, updateBannerAction } from "@/app/actions/admin";
+import {
+  createBannerAction,
+  updateBannerAction,
+} from "@/app/actions/admin";
 import { ImageUploader } from "@/components/admin/image-uploader";
 import { Banner } from "@/types/database";
 import {
@@ -11,11 +14,12 @@ import {
   X,
   Loader2,
   Image as ImageIcon,
-  Sparkles,
   Link2,
   Sliders,
   CheckCircle2,
   AlertCircle,
+  Languages,
+  Sparkles,
 } from "lucide-react";
 
 export function BannerForm({
@@ -45,20 +49,33 @@ export function BannerForm({
 
   // Form State
   const [title, setTitle] = useState(banner?.title || "");
+  const [titleAr, setTitleAr] = useState(banner?.title_ar || "");
   const [highlightedText, setHighlightedText] = useState(
     banner?.highlighted_text || ""
+  );
+  const [highlightedTextAr, setHighlightedTextAr] = useState(
+    banner?.highlighted_text_ar || ""
   );
   const [description, setDescription] = useState(
     banner?.description || ""
   );
+  const [descriptionAr, setDescriptionAr] = useState(
+    banner?.description_ar || ""
+  );
   const [primaryCtaText, setPrimaryCtaText] = useState(
     banner?.primary_cta_text || ""
+  );
+  const [primaryCtaTextAr, setPrimaryCtaTextAr] = useState(
+    banner?.primary_cta_text_ar || ""
   );
   const [primaryCtaLink, setPrimaryCtaLink] = useState(
     banner?.primary_cta_link || ""
   );
   const [secondaryCtaText, setSecondaryCtaText] = useState(
     banner?.secondary_cta_text || ""
+  );
+  const [secondaryCtaTextAr, setSecondaryCtaTextAr] = useState(
+    banner?.secondary_cta_text_ar || ""
   );
   const [secondaryCtaLink, setSecondaryCtaLink] = useState(
     banner?.secondary_cta_link || ""
@@ -77,6 +94,28 @@ export function BannerForm({
   );
   const [isActive, setIsActive] = useState(banner?.is_active ?? true);
 
+  const openModal = () => {
+    setTitle(banner?.title || "");
+    setTitleAr(banner?.title_ar || "");
+    setHighlightedText(banner?.highlighted_text || "");
+    setHighlightedTextAr(banner?.highlighted_text_ar || "");
+    setDescription(banner?.description || "");
+    setDescriptionAr(banner?.description_ar || "");
+    setPrimaryCtaText(banner?.primary_cta_text || "");
+    setPrimaryCtaTextAr(banner?.primary_cta_text_ar || "");
+    setPrimaryCtaLink(banner?.primary_cta_link || "");
+    setSecondaryCtaText(banner?.secondary_cta_text || "");
+    setSecondaryCtaTextAr(banner?.secondary_cta_text_ar || "");
+    setSecondaryCtaLink(banner?.secondary_cta_link || "");
+    setDesktopImageUrl(banner?.desktop_image_url || "");
+    setDesktopPublicId(banner?.cloudinary_public_id || null);
+    setMobileImageUrl(banner?.mobile_image_url || "");
+    setDisplayOrder(String(banner?.display_order ?? 1));
+    setIsActive(banner?.is_active ?? true);
+    setError(null);
+    setIsOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!desktopImageUrl.trim()) {
@@ -90,11 +129,16 @@ export function BannerForm({
     try {
       const bannerData = {
         title: title.trim(),
+        title_ar: titleAr.trim() || null,
         highlighted_text: highlightedText?.trim() || null,
+        highlighted_text_ar: highlightedTextAr?.trim() || null,
         description: description?.trim() || null,
+        description_ar: descriptionAr?.trim() || null,
         primary_cta_text: primaryCtaText?.trim() || null,
+        primary_cta_text_ar: primaryCtaTextAr?.trim() || null,
         primary_cta_link: primaryCtaLink?.trim() || null,
         secondary_cta_text: secondaryCtaText?.trim() || null,
+        secondary_cta_text_ar: secondaryCtaTextAr?.trim() || null,
         secondary_cta_link: secondaryCtaLink?.trim() || null,
         desktop_image_url: desktopImageUrl.trim(),
         mobile_image_url: mobileImageUrl?.trim() || null,
@@ -127,16 +171,13 @@ export function BannerForm({
   return (
     <>
       {trigger ? (
-        <div onClick={() => setIsOpen(true)} className="cursor-pointer">
+        <div onClick={openModal} className="cursor-pointer">
           {trigger}
         </div>
       ) : (
         <button
           type="button"
-          onClick={() => {
-            setIsOpen(true);
-            setError(null);
-          }}
+          onClick={openModal}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#8A1538] hover:bg-[#6c102c] text-white text-xs font-bold rounded-xl shadow-md transition-all hover:scale-102 active:scale-98 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -347,6 +388,100 @@ export function BannerForm({
                           placeholder="Short promotional subtitle, discount details, or warranty highlights..."
                           className="w-full p-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm resize-y"
                         />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION: Arabic Promotional Copy & Buttons */}
+                  <div className="p-5 sm:p-6 rounded-2xl bg-neutral-950/70 border border-neutral-800 space-y-5">
+                    <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Languages className="w-4 h-4 text-[#ff4b77]" />
+                        <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-200">
+                          Arabic Promotional Copy (النسخة الإعلانية)
+                        </h3>
+                      </div>
+                      <span className="text-[11px] text-neutral-500 font-normal">Manual translation</span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="sm:col-span-2 space-y-1.5">
+                          <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                            <span>Arabic Headline Title (العنوان الرئيسي)</span>
+                            <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={titleAr}
+                            onChange={(e) => setTitleAr(e.target.value)}
+                            placeholder="مثال: أحدث عروض الهواتف الذكية في قطر"
+                            className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                            <span>Arabic Badge (شارة العرض)</span>
+                            <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={highlightedTextAr}
+                            onChange={(e) => setHighlightedTextAr(e.target.value)}
+                            placeholder="مثال: عرض خاص"
+                            className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Description / Subtitle (الوصف الترويجي)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          dir="rtl"
+                          value={descriptionAr}
+                          onChange={(e) => setDescriptionAr(e.target.value)}
+                          placeholder="وصف ترويجي قصير، تفاصيل الخصومات، أو مميزات الضمان..."
+                          className="w-full p-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm resize-y text-right"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-neutral-800/60">
+                        <div className="space-y-1.5">
+                          <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                            <span>Arabic Primary Button (نص الزر الأساسي)</span>
+                            <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={primaryCtaTextAr}
+                            onChange={(e) => setPrimaryCtaTextAr(e.target.value)}
+                            placeholder="مثال: تسوق الآن"
+                            className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                            <span>Arabic Secondary Button (الزر الثانوي)</span>
+                            <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                          </label>
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={secondaryCtaTextAr}
+                            onChange={(e) => setSecondaryCtaTextAr(e.target.value)}
+                            placeholder="مثال: استكشف المزيد"
+                            className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient } from "@/lib/supabase/server";
+import {
+  buildNameBilingualOrFilter,
+  buildProductSearchOrFilter,
+  formatPostgrestIlikePattern,
+} from "@/lib/search-sanitizer";
+
+export const SEARCH_PRODUCT_SELECT = `
+  id, name, name_ar, slug, price, compare_at_price, stock,
+  short_description, short_description_ar,
+  badge_text, badge_text_ar, free_gift, free_gift_ar,
+  is_today_deal, is_best_deal, is_featured, category_id, brand_id,
+  category:categories (id, name, name_ar, slug),
+  brand:brands (id, name, name_ar, slug),
+  product_images (id, image_url, alt_text, alt_text_ar, is_primary)
+`;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -12,12 +27,7 @@ export async function GET(request: NextRequest) {
     if (!q || q.length < 1) {
       const { data: trending } = await supabase
         .from("products")
-        .select(`
-          id, name, slug, price, compare_at_price, stock, badge_text, free_gift, is_today_deal, is_best_deal, is_featured, category_id, brand_id,
-          category:categories (id, name, slug),
-          brand:brands (id, name, slug),
-          product_images (id, image_url, is_primary)
-        `)
+        .select(SEARCH_PRODUCT_SELECT)
         .eq("is_active", true)
         .order("is_featured", { ascending: false })
         .order("is_best_deal", { ascending: false })
@@ -33,18 +43,31 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Step 1: Find any categories or brands matching query
+    const pattern = formatPostgrestIlikePattern(q);
+    const filterClause = buildProductSearchOrFilter(q);
+    const nameOrFilter = buildNameBilingualOrFilter(q);
+
+    if (!pattern || !filterClause || !nameOrFilter) {
+      return NextResponse.json({
+        products: [],
+        isRelated: false,
+        directMatchCount: 0,
+        query: q,
+      });
+    }
+
+    // Step 1: Find any categories or brands matching query in English or Arabic
     const [catRes, brandRes] = await Promise.all([
       supabase
         .from("categories")
-        .select("id")
-        .ilike("name", `%${q}%`)
+        .select("id, name, name_ar, slug")
+        .or(nameOrFilter)
         .eq("is_active", true)
         .limit(4),
       supabase
         .from("brands")
-        .select("id")
-        .ilike("name", `%${q}%`)
+        .select("id, name, name_ar, slug")
+        .or(nameOrFilter)
         .eq("is_active", true)
         .limit(4),
     ]);
@@ -52,12 +75,8 @@ export async function GET(request: NextRequest) {
     const matchingCatIds = (catRes.data || []).map((c) => c.id);
     const matchingBrandIds = (brandRes.data || []).map((b) => b.id);
 
-    // Step 2: Query products directly matching name, short description, free gift, category, or brand
-    const orConditions = [
-      `name.ilike.%${q}%`,
-      `short_description.ilike.%${q}%`,
-      `free_gift.ilike.%${q}%`,
-    ];
+    // Step 2: Query products matching bilingual product fields, category, or brand
+    const orConditions = [filterClause];
     if (matchingCatIds.length > 0) {
       orConditions.push(`category_id.in.(${matchingCatIds.join(",")})`);
     }
@@ -67,12 +86,7 @@ export async function GET(request: NextRequest) {
 
     const { data: directMatches, error } = await supabase
       .from("products")
-      .select(`
-        id, name, slug, price, compare_at_price, stock, badge_text, free_gift, is_today_deal, is_best_deal, is_featured, category_id, brand_id,
-        category:categories (id, name, slug),
-        brand:brands (id, name, slug),
-        product_images (id, image_url, is_primary)
-      `)
+      .select(SEARCH_PRODUCT_SELECT)
       .eq("is_active", true)
       .or(orConditions.join(","))
       .order("is_featured", { ascending: false })
@@ -99,12 +113,7 @@ export async function GET(request: NextRequest) {
       if (primaryCatId || primaryBrandId) {
         let relatedQuery = supabase
           .from("products")
-          .select(`
-            id, name, slug, price, compare_at_price, stock, badge_text, free_gift, is_today_deal, is_best_deal, is_featured, category_id, brand_id,
-            category:categories (id, name, slug),
-            brand:brands (id, name, slug),
-            product_images (id, image_url, is_primary)
-          `)
+          .select(SEARCH_PRODUCT_SELECT)
           .eq("is_active", true);
 
         if (matchedIds.length > 0) {
@@ -133,12 +142,7 @@ export async function GET(request: NextRequest) {
 
         let fallbackQuery = supabase
           .from("products")
-          .select(`
-            id, name, slug, price, compare_at_price, stock, badge_text, free_gift, is_today_deal, is_best_deal, is_featured, category_id, brand_id,
-            category:categories (id, name, slug),
-            brand:brands (id, name, slug),
-            product_images (id, image_url, is_primary)
-          `)
+          .select(SEARCH_PRODUCT_SELECT)
           .eq("is_active", true);
 
         if (allUsedIds.length > 0) {

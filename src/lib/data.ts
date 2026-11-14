@@ -1,9 +1,36 @@
 import { createPublicClient } from "@/lib/supabase/server";
 import { Banner, Brand, Category, Product, SiteSettings } from "@/types/database";
+import {
+  buildProductSearchOrFilter,
+  formatPostgrestIlikePattern,
+  sanitizeSearchQuery,
+} from "./search-sanitizer";
+
+export {
+  buildProductSearchOrFilter,
+  formatPostgrestIlikePattern,
+  sanitizeSearchQuery,
+};
+
+export const PRODUCT_LIST_SELECT = `
+  id, name, name_ar, slug, short_description, short_description_ar,
+  description, description_ar, price, compare_at_price, stock,
+  warranty, warranty_ar, free_gift, free_gift_ar, badge_text, badge_text_ar,
+  is_featured, is_best_deal, is_today_deal, is_best_seller, is_new_arrival,
+  deal_ends_at, is_active, specifications, specifications_ar,
+  is_arabic_reviewed, arabic_updated_at, translation_metadata,
+  category_id, brand_id,
+  category:categories (id, name, name_ar, slug),
+  brand:brands (id, name, name_ar, slug),
+  product_images (
+    id, image_url, alt_text, alt_text_ar, is_primary, display_order
+  )
+`;
 
 // Default settings if database table is not yet initialized
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   store_name: "MOBILE DEALS",
+  store_name_ar: "موبايل ديلز",
   whatsapp_number: "+97455000000",
   support_phone: "+97455000000",
   store_email: "support@mobiledeals.qa",
@@ -17,14 +44,19 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
       "Order on WhatsApp",
       "100% Genuine Products",
     ],
+    items_ar: [
+      "الدفع عند الاستلام متاح",
+      "الطلب عبر واتساب",
+      "منتجات أصلية 100%",
+    ],
   },
   trust_badges: {
     items: [
-      { title: "Top Brands", subtitle: "100% Authentic gear", icon: "trophy" },
-      { title: "Qatar Wide Delivery", subtitle: "Fast doorstep shipping", icon: "truck" },
-      { title: "Best Prices", subtitle: "Unbeatable Qatar deals", icon: "thumbs-up" },
-      { title: "Dedicated Support", subtitle: "WhatsApp assistance", icon: "headset" },
-      { title: "Secure Ordering", subtitle: "Cash on Delivery verified", icon: "shield-check" },
+      { title: "Top Brands", title_ar: "أفضل العلامات التجارية", subtitle: "100% Authentic gear", subtitle_ar: "منتجات أصلية 100%", icon: "trophy" },
+      { title: "Qatar Wide Delivery", title_ar: "توصيل شامل لكل قطر", subtitle: "Fast doorstep shipping", subtitle_ar: "شحن سريع حتى باب منزلك", icon: "truck" },
+      { title: "Best Prices", title_ar: "أفضل الأسعار", subtitle: "Unbeatable Qatar deals", subtitle_ar: "عروض تنافسية حصرية", icon: "thumbs-up" },
+      { title: "Dedicated Support", title_ar: "دعم مخصص", subtitle: "WhatsApp assistance", subtitle_ar: "مساعدة مباشرة عبر واتساب", icon: "headset" },
+      { title: "Secure Ordering", title_ar: "طلب آمن ومضمون", subtitle: "Cash on Delivery verified", subtitle_ar: "دفع نقدي موثوق عند الاستلام", icon: "shield-check" },
     ],
   },
 };
@@ -38,7 +70,9 @@ export async function getCategories(): Promise<Category[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("categories")
-      .select("id, name, slug, description, image_url, icon_name, display_order, is_active")
+      .select(
+        "id, name, name_ar, slug, description, description_ar, image_url, icon_name, display_order, is_active, is_arabic_reviewed, arabic_updated_at, translation_metadata"
+      )
       .eq("is_active", true)
       .order("display_order", { ascending: true });
 
@@ -62,7 +96,7 @@ export async function getBanners(): Promise<Banner[]> {
     const { data, error } = await supabase
       .from("banners")
       .select(
-        "id, title, highlighted_text, description, primary_cta_text, primary_cta_link, secondary_cta_text, secondary_cta_link, desktop_image_url, mobile_image_url, cloudinary_public_id, position, display_order, is_active"
+        "id, title, title_ar, highlighted_text, highlighted_text_ar, description, description_ar, primary_cta_text, primary_cta_text_ar, primary_cta_link, secondary_cta_text, secondary_cta_text_ar, secondary_cta_link, desktop_image_url, mobile_image_url, cloudinary_public_id, position, display_order, is_active, is_arabic_reviewed, arabic_updated_at, translation_metadata"
       )
       .eq("is_active", true)
       .order("display_order", { ascending: true });
@@ -87,16 +121,7 @@ export async function getTodayDeals(): Promise<Product[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
-      .select(
-        `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
-        product_images (
-          id, image_url, alt_text, is_primary, display_order
-        )
-      `
-      )
+      .select(PRODUCT_LIST_SELECT)
       .eq("is_active", true)
       .or("is_today_deal.eq.true,is_best_deal.eq.true")
       .order("created_at", { ascending: false })
@@ -121,16 +146,7 @@ export async function getFeaturedProducts(): Promise<Product[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
-      .select(
-        `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
-        product_images (
-          id, image_url, alt_text, is_primary, display_order
-        )
-      `
-      )
+      .select(PRODUCT_LIST_SELECT)
       .eq("is_active", true)
       .eq("is_featured", true)
       .order("created_at", { ascending: false })
@@ -155,16 +171,7 @@ export async function getBestDeals(): Promise<Product[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
-      .select(
-        `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
-        product_images (
-          id, image_url, alt_text, is_primary, display_order
-        )
-      `
-      )
+      .select(PRODUCT_LIST_SELECT)
       .eq("is_active", true)
       .eq("is_best_deal", true)
       .order("created_at", { ascending: false })
@@ -189,7 +196,7 @@ export async function getBrands(): Promise<Brand[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("brands")
-      .select("id, name, slug, logo_url, is_active")
+      .select("id, name, name_ar, slug, logo_url, is_active")
       .eq("is_active", true)
       .order("name", { ascending: true });
 
@@ -212,19 +219,7 @@ export async function getAllProducts(): Promise<Product[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
-      .select(
-        `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, is_new_arrival, deal_ends_at, is_active, specifications,
-        category_id, brand_id,
-        category:categories (id, name, slug),
-        brand:brands (id, name, slug),
-        product_images (
-          id, image_url, alt_text, is_primary, display_order
-        )
-      `
-      )
+      .select(PRODUCT_LIST_SELECT)
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .limit(200);
@@ -295,16 +290,7 @@ export async function getProductsByCategory(categorySlug: string): Promise<{
 
     const { data: products } = await supabase
       .from("products")
-      .select(
-        `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, deal_ends_at, is_active, specifications,
-        product_images (
-          id, image_url, alt_text, is_primary, display_order
-        )
-      `
-      )
+      .select(PRODUCT_LIST_SELECT)
       .eq("category_id", category.id)
       .eq("is_active", true)
       .order("created_at", { ascending: false });
@@ -320,11 +306,11 @@ export async function getProductsByCategory(categorySlug: string): Promise<{
 }
 
 /**
- * Search products by query string.
+ * Search products by query string across English & Arabic fields using safe PostgREST encoding.
  */
 export async function searchProducts(query: string): Promise<Product[]> {
-  const q = query?.trim();
-  if (!q || q.length < 1) {
+  const filterClause = buildProductSearchOrFilter(query);
+  if (!filterClause) {
     return [];
   }
 
@@ -332,20 +318,9 @@ export async function searchProducts(query: string): Promise<Product[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
-      .select(
-        `
-        id, name, slug, short_description, price, compare_at_price, stock,
-        warranty, free_gift, badge_text, is_featured, is_best_deal, is_today_deal,
-        is_best_seller, is_new_arrival, is_active, specifications,
-        category:categories (id, name, slug),
-        brand:brands (id, name, slug),
-        product_images (
-          id, image_url, alt_text, is_primary, display_order
-        )
-      `
-      )
+      .select(PRODUCT_LIST_SELECT)
       .eq("is_active", true)
-      .or(`name.ilike.%${q}%,short_description.ilike.%${q}%,free_gift.ilike.%${q}%`)
+      .or(filterClause)
       .limit(20);
 
     if (error) {

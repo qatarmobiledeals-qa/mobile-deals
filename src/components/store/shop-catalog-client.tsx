@@ -1,10 +1,19 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, useTransition } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { createPortal } from "react-dom";
+import { Link, useRouter, usePathname } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Category, Brand, Product } from "@/types/database";
 import { ProductCard } from "@/components/store/product-card";
+import { resolveCategoryContent, resolveBrandContent } from "@/lib/i18n/content-resolver";
+import { formatPrice } from "@/lib/formatters";
+import {
+  DrawerPhase,
+  getFocusableElements,
+  isElementVisiblyFocusable,
+} from "@/components/store/main-navbar";
 import {
   SlidersHorizontal,
   Search,
@@ -36,13 +45,80 @@ interface ShopCatalogClientProps {
 
 type SortOption = "featured" | "price_asc" | "price_desc" | "discount" | "newest";
 
-const sortOptions: { id: SortOption; label: string }[] = [
-  { id: "featured", label: "Featured & Deals" },
-  { id: "price_asc", label: "Price: Low to High" },
-  { id: "price_desc", label: "Price: High to Low" },
-  { id: "discount", label: "Highest Discount" },
-  { id: "newest", label: "Newest Arrivals" },
-];
+/** Builds a locale-prefixed catalog URL without double-prefixing existing locale segments. */
+export function buildLocalizedCatalogUrl(locale: string, pathname: string, queryStr: string): string {
+  const safeLocale = locale === "ar" ? "ar" : "en";
+  const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  const withoutLocale =
+    normalizedPath === "/en" || normalizedPath.startsWith("/en/")
+      ? normalizedPath.slice(3) || "/"
+      : normalizedPath === "/ar" || normalizedPath.startsWith("/ar/")
+      ? normalizedPath.slice(3) || "/"
+      : normalizedPath;
+  const localizedPath = withoutLocale === "/" ? `/${safeLocale}` : `/${safeLocale}${withoutLocale}`;
+  return queryStr ? `${localizedPath}?${queryStr}` : localizedPath;
+}
+
+/** Matches a product against a search query across both English and Arabic fields. */
+export function matchesBilingualCatalogSearch(product: Product, rawQuery: string): boolean {
+  const q = rawQuery.toLowerCase().trim();
+  if (!q) return true;
+  const fields = [
+    product.name,
+    product.name_ar,
+    product.brand?.name,
+    product.brand?.name_ar,
+    product.short_description,
+    product.short_description_ar,
+    product.free_gift,
+    product.free_gift_ar,
+  ];
+  return fields.some((field) => typeof field === "string" && field.toLowerCase().includes(q));
+}
+
+/**
+ * Normalizes strings into canonical URL-friendly slugs for robust category matching.
+ */
+function slugify(text: string = ""): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function matchCategoryOrSlug(
+  cat: Category | { id: string; name: string; slug: string },
+  target: string
+): boolean {
+  if (!cat || !target) return false;
+  const rawTarget = target.trim();
+  const decodedTarget = decodeURIComponent(rawTarget).trim();
+  const targetLower = decodedTarget.toLowerCase();
+  const targetSlug = slugify(decodedTarget);
+
+  if (cat.id && cat.id.toLowerCase() === targetLower) return true;
+  if (cat.slug && (cat.slug.toLowerCase() === targetLower || cat.slug.toLowerCase() === rawTarget.toLowerCase())) return true;
+  if (cat.name && (cat.name.toLowerCase() === targetLower || cat.name.toLowerCase() === rawTarget.toLowerCase())) return true;
+
+  if (cat.slug && slugify(cat.slug) === targetSlug) return true;
+  if (cat.name && slugify(cat.name) === targetSlug) return true;
+
+  if (targetSlug.includes("mobile") && targetSlug.includes("tablet")) {
+    const catSlugNorm = slugify(cat.slug || "");
+    const catNameNorm = slugify(cat.name || "");
+    if (
+      (catSlugNorm.includes("mobile") && catSlugNorm.includes("tablet")) ||
+      (catNameNorm.includes("mobile") && catNameNorm.includes("tablet"))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 export function ShopCatalogClient({
   initialProducts = [],
@@ -55,7 +131,29 @@ export function ShopCatalogClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const locale = useLocale();
+  const isRtl = locale === "ar";
+  const tShop = useTranslations("shop");
+  const tCommon = useTranslations("common");
+  const tNav = useTranslations("nav");
   const [, startTransition] = useTransition();
+
+  const sortOptions: { id: SortOption; label: string }[] = [
+    { id: "featured", label: tShop("sortFeatured") },
+    { id: "price_asc", label: tShop("sortPriceAsc") },
+    { id: "price_desc", label: tShop("sortPriceDesc") },
+    { id: "discount", label: tShop("sortDiscount") },
+    { id: "newest", label: tShop("sortNewest") },
+  ];
+
+  const dealLabelMap: Record<string, string> = {
+    all: tShop("allItems"),
+    free_gift: tShop("freeGiftIncluded"),
+    best_deal: tShop("bestDeals"),
+    featured: tShop("featuredGear"),
+    best_seller: tShop("bestSellers"),
+    new_arrival: tShop("newArrivals"),
+  };
 
   // Search & Filter State (initialized from URL query params if present)
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
@@ -107,8 +205,68 @@ export function ShopCatalogClient({
   const currentSliderMax = maxPrice ? Number(maxPrice) : maxCatalogPrice;
   const sliderPercent = Math.min(100, Math.max(0, (currentSliderMax / maxCatalogPrice) * 100));
 
-  // Mobile Drawer State
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  // Mobile Drawer State (Strict-Mode-safe 4-state DrawerPhase lifecycle)
+  const [drawerPhase, setDrawerPhase] = useState<DrawerPhase>("closed");
+  const drawerPhaseRef = useRef<DrawerPhase>("closed");
+  const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
+  const activeTriggerElRef = useRef<HTMLElement | null>(null);
+  const needsFocusRestoreRef = useRef<boolean>(false);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const drawerPanelRef = useRef<HTMLDivElement | null>(null);
+  const portalRootRef = useRef<HTMLDivElement | null>(null);
+
+  const isDrawerMounted = drawerPhase !== "closed";
+  const isDrawerVisible = drawerPhase === "open";
+  const isDrawerOpen = drawerPhase === "opening" || drawerPhase === "open";
+
+  const restoreTriggerFocusOnce = React.useCallback(() => {
+    if (!needsFocusRestoreRef.current) return;
+    needsFocusRestoreRef.current = false;
+    const triggerEl = activeTriggerElRef.current ?? triggerButtonRef.current;
+    activeTriggerElRef.current = null;
+    if (triggerEl && triggerEl.isConnected && document.contains(triggerEl)) {
+      triggerEl.focus();
+    }
+  }, []);
+
+  const openMobileDrawer = React.useCallback((triggerEl?: HTMLElement | null) => {
+    if (drawerPhaseRef.current === "opening" || drawerPhaseRef.current === "open") {
+      return;
+    }
+    activeTriggerElRef.current =
+      triggerEl ??
+      triggerButtonRef.current ??
+      (typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
+    needsFocusRestoreRef.current = true;
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const nextPhase: DrawerPhase = prefersReducedMotion ? "open" : "opening";
+    drawerPhaseRef.current = nextPhase;
+    setDrawerPhase(nextPhase);
+  }, [setDrawerPhase]);
+
+  const closeMobileDrawer = React.useCallback(() => {
+    const prev = drawerPhaseRef.current;
+    if (prev === "closed" || prev === "closing") return;
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const nextPhase: DrawerPhase =
+      prefersReducedMotion || prev === "opening" ? "closed" : "closing";
+    drawerPhaseRef.current = nextPhase;
+    setDrawerPhase(nextPhase);
+    if (nextPhase === "closed") {
+      restoreTriggerFocusOnce();
+    }
+  }, [setDrawerPhase, restoreTriggerFocusOnce]);
 
   // Collapsible sidebar sections
   const [openSections, setOpenSections] = useState({
@@ -123,9 +281,10 @@ export function ShopCatalogClient({
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // Sync filters to URL query string without reloading page
+  // Sync filters to locale-prefixed URL query string without reloading page
   useEffect(() => {
-    const isCategoryRoute = pathname.startsWith("/categories/");
+    const isCategoryRoute =
+      pathname.startsWith("/categories/") || /^\/(en|ar)\/categories\//.test(pathname);
 
     if (isCategoryRoute) {
       // On category route, sync only secondary filters (brand, price, etc.) into URL params
@@ -138,7 +297,7 @@ export function ShopCatalogClient({
       if (sortBy !== "featured") params.set("sort", sortBy);
 
       const queryStr = params.toString();
-      const targetUrl = queryStr ? `${pathname}?${queryStr}` : pathname;
+      const targetUrl = buildLocalizedCatalogUrl(locale, pathname, queryStr);
       startTransition(() => {
         window.history.replaceState(null, "", targetUrl);
       });
@@ -154,67 +313,165 @@ export function ShopCatalogClient({
       if (sortBy !== "featured") params.set("sort", sortBy);
 
       const queryStr = params.toString();
-      const targetUrl = queryStr ? `${pathname}?${queryStr}` : pathname;
+      const targetUrl = buildLocalizedCatalogUrl(locale, pathname, queryStr);
       startTransition(() => {
         window.history.replaceState(null, "", targetUrl);
       });
     }
-  }, [searchQuery, selectedCategories, selectedBrands, selectedDealType, maxPrice, maxCatalogPrice, inStockOnly, sortBy, pathname]);
+  }, [searchQuery, selectedCategories, selectedBrands, selectedDealType, maxPrice, maxCatalogPrice, inStockOnly, sortBy, pathname, locale]);
 
-  // Lock background body scroll when mobile filter drawer is open
+  // Opening transition: double-RAF ensures hidden transform paints before sliding in (Strict-Mode safe)
   useEffect(() => {
-    if (mobileFilterOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
+    if (drawerPhase !== "opening") return;
+
+    let didTransitionToOpen = false;
+    let raf1 = 0;
+    let raf2 = 0;
+
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        didTransitionToOpen = true;
+        drawerPhaseRef.current = "open";
+        setDrawerPhase("open");
+      });
+    });
+
+    const portalRoot = portalRootRef.current;
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      const isSimulatedStrictCleanup =
+        drawerPhaseRef.current === "opening" && Boolean(portalRoot && portalRoot.isConnected);
+      if (!didTransitionToOpen && drawerPhaseRef.current !== "open" && !isSimulatedStrictCleanup) {
+        restoreTriggerFocusOnce();
+      }
+    };
+  }, [drawerPhase, restoreTriggerFocusOnce]);
+
+  // Closing fallback timer if CSS transitionend does not fire
+  useEffect(() => {
+    if (drawerPhase !== "closing") return;
+    const portalRoot = portalRootRef.current;
+    const timer = window.setTimeout(() => {
+      drawerPhaseRef.current = "closed";
+      setDrawerPhase("closed");
+    }, 320);
+    return () => {
+      window.clearTimeout(timer);
+      const isSimulatedStrictCleanup =
+        drawerPhaseRef.current === "closing" && Boolean(portalRoot && portalRoot.isConnected);
+      if (!isSimulatedStrictCleanup) {
+        restoreTriggerFocusOnce();
+      }
+    };
+  }, [drawerPhase, restoreTriggerFocusOnce]);
+
+  // Active drawer lifecycle: scroll lock, sibling inert/aria-hidden isolation, focus trap & Escape
+  useEffect(() => {
+    if (drawerPhase !== "open") return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    const modifiedSiblings: Array<{
+      el: HTMLElement;
+      prevInert: boolean;
+      prevAriaHidden: string | null;
+    }> = [];
+
+    for (const child of Array.from(document.body.children)) {
+      if (
+        !(child instanceof HTMLElement) ||
+        child === portalRootRef.current ||
+        (portalRootRef.current && child.contains(portalRootRef.current))
+      ) {
+        continue;
+      }
+      if (child.tagName === "SCRIPT" || child.tagName === "STYLE") continue;
+
+      modifiedSiblings.push({
+        el: child,
+        prevInert: Boolean(child.inert),
+        prevAriaHidden: child.getAttribute("aria-hidden"),
+      });
+      child.inert = true;
+      child.setAttribute("aria-hidden", "true");
     }
-  }, [mobileFilterOpen]);
 
-/**
- * Normalizes strings into canonical URL-friendly slugs for robust category matching.
- */
-function slugify(text: string = ""): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/&/g, "and")
-    .replace(/[^\w\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function matchCategoryOrSlug(
-  cat: Category | { id: string; name: string; slug: string },
-  target: string
-): boolean {
-  if (!cat || !target) return false;
-  const rawTarget = target.trim();
-  const decodedTarget = decodeURIComponent(rawTarget).trim();
-  const targetLower = decodedTarget.toLowerCase();
-  const targetSlug = slugify(decodedTarget);
-
-  if (cat.id && cat.id.toLowerCase() === targetLower) return true;
-  if (cat.slug && (cat.slug.toLowerCase() === targetLower || cat.slug.toLowerCase() === rawTarget.toLowerCase())) return true;
-  if (cat.name && (cat.name.toLowerCase() === targetLower || cat.name.toLowerCase() === rawTarget.toLowerCase())) return true;
-
-  if (cat.slug && slugify(cat.slug) === targetSlug) return true;
-  if (cat.name && slugify(cat.name) === targetSlug) return true;
-
-  if (targetSlug.includes("mobile") && targetSlug.includes("tablet")) {
-    const catSlugNorm = slugify(cat.slug || "");
-    const catNameNorm = slugify(cat.name || "");
-    if (
-      (catSlugNorm.includes("mobile") && catSlugNorm.includes("tablet")) ||
-      (catNameNorm.includes("mobile") && catNameNorm.includes("tablet"))
-    ) {
-      return true;
+    const focusTarget = closeButtonRef.current;
+    if (focusTarget && isElementVisiblyFocusable(focusTarget)) {
+      focusTarget.focus();
+    } else if (drawerPanelRef.current) {
+      const focusables = getFocusableElements(drawerPanelRef.current);
+      (focusables[0] ?? drawerPanelRef.current).focus();
     }
-  }
 
-  return false;
-}
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMobileDrawer();
+        return;
+      }
+
+      if (e.key === "Tab" && drawerPanelRef.current) {
+        const focusables = getFocusableElements(drawerPanelRef.current);
+        if (focusables.length === 0) {
+          e.preventDefault();
+          drawerPanelRef.current.focus();
+          return;
+        }
+
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+
+        if (!active || !drawerPanelRef.current.contains(active)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+          return;
+        }
+
+        if (e.shiftKey && (active === first || active === drawerPanelRef.current)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const portalRoot = portalRootRef.current;
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.body.style.touchAction = originalTouchAction;
+      window.removeEventListener("keydown", handleKeyDown);
+
+      for (const { el, prevInert, prevAriaHidden } of modifiedSiblings) {
+        el.inert = prevInert;
+        if (prevAriaHidden === null) {
+          el.removeAttribute("aria-hidden");
+        } else {
+          el.setAttribute("aria-hidden", prevAriaHidden);
+        }
+      }
+
+      const isSimulatedStrictCleanup =
+        drawerPhaseRef.current === "open" && Boolean(portalRoot && portalRoot.isConnected);
+      if (!isSimulatedStrictCleanup) {
+        restoreTriggerFocusOnce();
+      }
+    };
+  }, [drawerPhase, closeMobileDrawer, restoreTriggerFocusOnce]);
 
   // Pre-calculate Category product counts
   const categoryCounts = useMemo(() => {
@@ -303,10 +560,10 @@ function matchCategoryOrSlug(
     setInStockOnly(false);
     setSortBy("featured");
 
-    if (pathname.startsWith("/categories/")) {
+    if (pathname.startsWith("/categories/") || /^\/(en|ar)\/categories\//.test(pathname)) {
       router.push("/shop");
     } else {
-      window.history.replaceState(null, "", "/shop");
+      window.history.replaceState(null, "", buildLocalizedCatalogUrl(locale, "/shop", ""));
     }
   };
 
@@ -326,16 +583,9 @@ function matchCategoryOrSlug(
   const filteredAndSortedProducts = useMemo(() => {
     return initialProducts
       .filter((product) => {
-        // 1. Text Search Filter (name, brand name, short description, specifications)
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase().trim();
-          const nameMatch = product.name.toLowerCase().includes(q);
-          const brandMatch = product.brand?.name?.toLowerCase().includes(q) || false;
-          const shortDescMatch = product.short_description?.toLowerCase().includes(q) || false;
-          const giftMatch = product.free_gift?.toLowerCase().includes(q) || false;
-          if (!nameMatch && !brandMatch && !shortDescMatch && !giftMatch) {
-            return false;
-          }
+        // 1. Bilingual Text Search Filter (EN & AR: name, brand, short description, free gift)
+        if (!matchesBilingualCatalogSearch(product, searchQuery)) {
+          return false;
         }
 
         // 2. Category Filter
@@ -429,6 +679,7 @@ function matchCategoryOrSlug(
       });
   }, [
     initialProducts,
+    categories,
     searchQuery,
     selectedCategories,
     selectedBrands,
@@ -437,6 +688,13 @@ function matchCategoryOrSlug(
     inStockOnly,
     sortBy,
   ]);
+
+  const matchedInitialCategory = initialCategory
+    ? categories.find((c) => matchCategoryOrSlug(c, initialCategory))
+    : undefined;
+  const resolvedInitialCategoryName = matchedInitialCategory
+    ? resolveCategoryContent(matchedInitialCategory, locale).displayName
+    : initialCategoryName;
 
   // Render Sidebar Content (Shared between Desktop Sidebar and Mobile Slide Drawer)
   const renderFilterControls = () => (
@@ -449,7 +707,7 @@ function matchCategoryOrSlug(
             onClick={() => toggleSection("categories")}
             className="flex items-center justify-between w-full font-bold text-neutral-900 text-xs sm:text-sm uppercase tracking-wider mb-3 cursor-pointer"
           >
-            <span>Categories</span>
+            <span>{tShop("categories")}</span>
             {openSections.categories ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
 
@@ -458,6 +716,7 @@ function matchCategoryOrSlug(
               {categories.map((cat) => {
                 const isSelected = selectedCategories.some((selected) => matchCategoryOrSlug(cat, selected));
                 const count = categoryCounts[cat.id] || categoryCounts[cat.slug] || 0;
+                const displayCatName = resolveCategoryContent(cat, locale).displayName;
 
                 return (
                   <label
@@ -473,7 +732,7 @@ function matchCategoryOrSlug(
                         onChange={() => toggleCategory(cat.slug || cat.id)}
                         className="w-4 h-4 accent-[#8A1538] rounded cursor-pointer"
                       />
-                      <span className="truncate text-xs">{cat.name}</span>
+                      <span className="truncate text-xs">{displayCatName}</span>
                     </div>
                     <span className="text-[11px] font-mono text-neutral-400 shrink-0">
                       ({count})
@@ -494,7 +753,7 @@ function matchCategoryOrSlug(
             onClick={() => toggleSection("brands")}
             className="flex items-center justify-between w-full font-bold text-neutral-900 text-xs sm:text-sm uppercase tracking-wider mb-3 cursor-pointer"
           >
-            <span>Brands</span>
+            <span>{tShop("brands")}</span>
             {openSections.brands ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
 
@@ -504,6 +763,7 @@ function matchCategoryOrSlug(
                 const isSelected =
                   selectedBrands.includes(b.id) || selectedBrands.includes(b.slug);
                 const count = brandCounts[b.id] || brandCounts[b.slug] || 0;
+                const displayBrandName = resolveBrandContent(b, locale).displayName;
 
                 return (
                   <label
@@ -519,7 +779,7 @@ function matchCategoryOrSlug(
                         onChange={() => toggleBrand(b.slug || b.id)}
                         className="w-4 h-4 accent-[#8A1538] rounded cursor-pointer"
                       />
-                      <span className="truncate text-xs">{b.name}</span>
+                      <span className="truncate text-xs">{displayBrandName}</span>
                     </div>
                     <span className="text-[11px] font-mono text-neutral-400 shrink-0">
                       ({count})
@@ -539,19 +799,19 @@ function matchCategoryOrSlug(
           onClick={() => toggleSection("deals")}
           className="flex items-center justify-between w-full font-bold text-neutral-900 text-xs sm:text-sm uppercase tracking-wider mb-3 cursor-pointer"
         >
-          <span>Special Deals &amp; Offers</span>
+          <span>{tShop("specialDealsOffers")}</span>
           {openSections.deals ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
 
         {openSections.deals && (
           <div className="space-y-1.5 pt-1">
             {[
-              { key: "all", label: "All Items", icon: ShoppingBag, color: "text-neutral-500" },
-              { key: "free_gift", label: "Free Gift Included", icon: Gift, color: "text-amber-600" },
-              { key: "best_deal", label: "Best Deals", icon: Sparkles, color: "text-amber-500" },
-              { key: "featured", label: "Featured Gear", icon: Star, color: "text-yellow-600" },
-              { key: "best_seller", label: "Best Sellers", icon: Award, color: "text-indigo-600" },
-              { key: "new_arrival", label: "New Arrivals", icon: Tag, color: "text-cyan-600" },
+              { key: "all", label: tShop("allItems"), icon: ShoppingBag, color: "text-neutral-500" },
+              { key: "free_gift", label: tShop("freeGiftIncluded"), icon: Gift, color: "text-amber-600" },
+              { key: "best_deal", label: tShop("bestDeals"), icon: Sparkles, color: "text-amber-500" },
+              { key: "featured", label: tShop("featuredGear"), icon: Star, color: "text-yellow-600" },
+              { key: "best_seller", label: tShop("bestSellers"), icon: Award, color: "text-indigo-600" },
+              { key: "new_arrival", label: tShop("newArrivals"), icon: Tag, color: "text-cyan-600" },
             ].map((deal) => {
               const isSelected = selectedDealType === deal.key;
               return (
@@ -577,14 +837,14 @@ function matchCategoryOrSlug(
         )}
       </div>
 
-      {/* 4. Price Range Filter (Simplified Slider matching reference) */}
+      {/* 4. Price Range Filter */}
       <div className="border-b border-neutral-200/80 pb-5">
         <div className="flex items-center justify-between mb-3">
           <span className="font-extrabold text-neutral-900 text-xs sm:text-sm tracking-wider uppercase">
-            MAX PRICE
+            {tShop("maxPrice")}
           </span>
           <span className="font-bold text-xs sm:text-sm text-[#8A1538]">
-            {currency} {currentSliderMax.toLocaleString()}
+            {formatPrice(currentSliderMax, locale, currency)}
           </span>
         </div>
 
@@ -605,14 +865,14 @@ function matchCategoryOrSlug(
             }}
             className="range-slider"
             style={{
-              background: `linear-gradient(to right, #8A1538 ${sliderPercent}%, #e2e8f0 ${sliderPercent}%)`,
+              background: `linear-gradient(${isRtl ? "to left" : "to right"}, #8A1538 ${sliderPercent}%, #e2e8f0 ${sliderPercent}%)`,
             }}
           />
         </div>
 
         <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mt-1">
-          <span>{currency} 0</span>
-          <span>{currency} {maxCatalogPrice.toLocaleString()}</span>
+          <span>{formatPrice(0, locale, currency)}</span>
+          <span>{formatPrice(maxCatalogPrice, locale, currency)}</span>
         </div>
       </div>
 
@@ -620,7 +880,7 @@ function matchCategoryOrSlug(
       <div>
         <label className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 border border-neutral-200/80 cursor-pointer hover:border-neutral-300 transition-colors">
           <span className="font-bold text-neutral-800 text-xs">
-            In Stock Only
+            {tShop("inStockOnly")}
           </span>
           <input
             type="checkbox"
@@ -639,7 +899,7 @@ function matchCategoryOrSlug(
           className="w-full py-2.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset All Filters ({activeFiltersCount})</span>
+          <span>{tShop("resetAllFiltersCount", { count: activeFiltersCount })}</span>
         </button>
       )}
     </div>
@@ -649,19 +909,19 @@ function matchCategoryOrSlug(
     <div className="min-h-screen bg-neutral-50/40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* ── Breadcrumb Header ── */}
-        <nav aria-label="Breadcrumb" className="text-xs text-neutral-500 mb-3 flex items-center gap-2">
+        <nav aria-label={tCommon("breadcrumbAria")} className="text-xs text-neutral-500 mb-3 flex items-center gap-2">
           <Link href="/" className="hover:text-[#8A1538] transition-colors">
-            Home
+            {tNav("home")}
           </Link>
           <span>/</span>
-          {initialCategoryName ? (
+          {resolvedInitialCategoryName ? (
             <>
-              <Link href="/shop" className="hover:text-[#8A1538] transition-colors">Shop</Link>
+              <Link href="/shop" className="hover:text-[#8A1538] transition-colors">{tShop("title")}</Link>
               <span>/</span>
-              <span className="font-bold text-neutral-900">{initialCategoryName}</span>
+              <span className="font-bold text-neutral-900">{resolvedInitialCategoryName}</span>
             </>
           ) : (
-            <span className="font-bold text-neutral-900">Shop</span>
+            <span className="font-bold text-neutral-900">{tShop("title")}</span>
           )}
         </nav>
 
@@ -671,31 +931,32 @@ function matchCategoryOrSlug(
             <div className="flex items-center gap-2.5">
               <span className="w-2 h-7 bg-[#8A1538] rounded-full inline-block" />
               <h1 className="text-2xl sm:text-3xl font-black text-neutral-900 tracking-tight">
-                {initialCategoryName || "Shop"}
+                {resolvedInitialCategoryName || tShop("title")}
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-neutral-500 mt-1">
-              {initialCategoryName
-                ? `Browse and filter ${initialCategoryName} — Cash on Delivery across Qatar.`
-                : "Browse, filter, and find the perfect gear for you."}
+              {resolvedInitialCategoryName
+                ? tShop("categorySubtitle", { category: resolvedInitialCategoryName })
+                : tShop("subtitle")}
             </p>
           </div>
 
           {/* Search bar inside shop catalog */}
           <div className="relative w-full md:w-80">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search catalog..."
-              className="w-full pl-9 pr-8 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538]/20 shadow-2xs"
+              placeholder={tShop("searchCatalogPlaceholder")}
+              className="w-full ps-9 pe-8 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538]/20 shadow-2xs"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-600"
+                aria-label={tNav("clearSearch")}
+                className="absolute end-2.5 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-600"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -705,18 +966,19 @@ function matchCategoryOrSlug(
 
         {/* ── Top Filter Bar & Sort Controls ── */}
         <div className="flex items-center justify-between gap-3 mb-6 bg-white px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-2xl border border-neutral-200/80 shadow-2xs">
-          {/* Left: Active Results Count */}
+          {/* Start: Active Results Count */}
           <span className="text-xs sm:text-sm font-medium text-neutral-600">
-            Found {filteredAndSortedProducts.length}{" "}
-            {filteredAndSortedProducts.length === 1 ? "product" : "products"}
+            {filteredAndSortedProducts.length === 1
+              ? tShop("foundProductSingular", { count: 1 })
+              : tShop("foundProducts", { count: filteredAndSortedProducts.length })}
           </span>
 
-          {/* Right: Sort Dropdown (Desktop Only) & Mobile Filter Button */}
+          {/* End: Sort Dropdown (Desktop Only) & Mobile Filter Button */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Custom Sort By Dropdown - Desktop Only */}
             <div className="hidden lg:flex items-center gap-2">
               <label className="text-xs font-medium text-neutral-500">
-                Sort by:
+                {tShop("sortBy")}
               </label>
               <div className="relative" ref={sortDropdownRef}>
                 <button
@@ -728,7 +990,7 @@ function matchCategoryOrSlug(
                       : "border-neutral-200/90 hover:border-neutral-300"
                   }`}
                 >
-                  <span className="truncate">{sortOptions.find((o) => o.id === sortBy)?.label || "Featured & Deals"}</span>
+                  <span className="truncate">{sortOptions.find((o) => o.id === sortBy)?.label || tShop("sortFeatured")}</span>
                   <ChevronDown
                     className={`w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200 ${
                       sortDropdownOpen ? "rotate-180 text-[#8A1538]" : ""
@@ -737,7 +999,7 @@ function matchCategoryOrSlug(
                 </button>
 
                 {sortDropdownOpen && (
-                  <div className="absolute right-0 top-full mt-1.5 w-48 sm:w-52 bg-white rounded-2xl border border-neutral-200/80 shadow-xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="absolute end-0 top-full mt-1.5 w-48 sm:w-52 bg-white rounded-2xl border border-neutral-200/80 shadow-xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100">
                     {sortOptions.map((opt) => {
                       const isSelected = sortBy === opt.id;
                       return (
@@ -748,7 +1010,7 @@ function matchCategoryOrSlug(
                             setSortBy(opt.id);
                             setSortDropdownOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs text-left transition-colors cursor-pointer ${
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs text-start transition-colors cursor-pointer ${
                             isSelected
                               ? "bg-[#8A1538]/5 text-[#8A1538] font-bold"
                               : "text-neutral-700 hover:bg-neutral-50"
@@ -766,12 +1028,15 @@ function matchCategoryOrSlug(
 
             {/* Mobile/Tablet Filter Button with Website Brand Color */}
             <button
+              ref={triggerButtonRef}
               type="button"
-              onClick={() => setMobileFilterOpen(true)}
+              onClick={(e) => openMobileDrawer(e.currentTarget)}
+              aria-expanded={isDrawerOpen}
+              aria-controls="mobile-filter-drawer"
               className="lg:hidden inline-flex items-center gap-2 px-4 py-2 bg-[#8A1538] hover:bg-[#72122f] text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-white" />
-              <span>Filters</span>
+              <span>{tShop("filters")}</span>
               {activeFiltersCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-white text-[#8A1538] text-[10px] font-extrabold inline-flex items-center justify-center">
                   {activeFiltersCount}
@@ -786,31 +1051,32 @@ function matchCategoryOrSlug(
           <div className="flex items-center gap-2 flex-wrap mb-6">
             <span className="text-xs font-semibold text-neutral-500 flex items-center gap-1">
               <Filter className="w-3.5 h-3.5" />
-              <span>Active:</span>
+              <span>{tShop("active")}</span>
             </span>
 
             {searchQuery && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#8A1538]/10 text-[#8A1538] text-xs font-bold">
-                <span>Search: &quot;{searchQuery}&quot;</span>
+                <span>{tShop("searchChip", { query: searchQuery })}</span>
                 <X className="w-3 h-3 cursor-pointer" onClick={() => setSearchQuery("")} />
               </span>
             )}
 
             {selectedDealType !== "all" && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
-                <span>Offer: {selectedDealType.replace("_", " ")}</span>
+                <span>{tShop("offerChip", { offer: dealLabelMap[selectedDealType] || selectedDealType.replace("_", " ") })}</span>
                 <X className="w-3 h-3 cursor-pointer" onClick={() => setSelectedDealType("all")} />
               </span>
             )}
 
             {selectedCategories.map((catIdOrSlug) => {
               const cat = categories.find((c) => matchCategoryOrSlug(c, catIdOrSlug));
+              const displayCatName = cat ? resolveCategoryContent(cat, locale).displayName : decodeURIComponent(catIdOrSlug);
               return (
                 <span
                   key={catIdOrSlug}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-neutral-200 text-neutral-800 text-xs font-semibold"
                 >
-                  <span>{cat?.name || decodeURIComponent(catIdOrSlug)}</span>
+                  <span>{displayCatName}</span>
                   <X className="w-3 h-3 cursor-pointer" onClick={() => toggleCategory(catIdOrSlug)} />
                 </span>
               );
@@ -818,12 +1084,13 @@ function matchCategoryOrSlug(
 
             {selectedBrands.map((brandIdOrSlug) => {
               const b = brands.find((brand) => brand.id === brandIdOrSlug || brand.slug === brandIdOrSlug);
+              const displayBrandName = b ? resolveBrandContent(b, locale).displayName : brandIdOrSlug;
               return (
                 <span
                   key={brandIdOrSlug}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-neutral-200 text-neutral-800 text-xs font-semibold"
                 >
-                  <span>{b?.name || brandIdOrSlug}</span>
+                  <span>{displayBrandName}</span>
                   <X className="w-3 h-3 cursor-pointer" onClick={() => toggleBrand(brandIdOrSlug)} />
                 </span>
               );
@@ -832,7 +1099,7 @@ function matchCategoryOrSlug(
             {maxPrice && Number(maxPrice) < maxCatalogPrice && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#8A1538]/10 text-[#8A1538] text-xs font-bold">
                 <span>
-                  Max: {currency} {Number(maxPrice).toLocaleString()}
+                  {tShop("maxChip", { price: formatPrice(Number(maxPrice), locale, currency) })}
                 </span>
                 <X
                   className="w-3 h-3 cursor-pointer"
@@ -843,7 +1110,7 @@ function matchCategoryOrSlug(
 
             {inStockOnly && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 text-xs font-bold">
-                <span>In Stock Only</span>
+                <span>{tShop("inStockOnly")}</span>
                 <X className="w-3 h-3 cursor-pointer" onClick={() => setInStockOnly(false)} />
               </span>
             )}
@@ -851,22 +1118,22 @@ function matchCategoryOrSlug(
             <button
               type="button"
               onClick={handleClearAllFilters}
-              className="text-xs font-bold text-[#8A1538] hover:underline cursor-pointer ml-1"
+              className="text-xs font-bold text-[#8A1538] hover:underline cursor-pointer ms-1"
             >
-              Clear All
+              {tShop("clearAll")}
             </button>
           </div>
         )}
 
         {/* ── Main Catalog Grid + Desktop Sidebar Layout ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
-          {/* Desktop Left Filter Sidebar (3 cols) with Fixed Header & Scrollable Body */}
+          {/* Desktop Start Filter Sidebar (3 cols) with Fixed Header & Scrollable Body */}
           <aside className="hidden lg:flex lg:flex-col lg:col-span-3 bg-white rounded-3xl border border-neutral-200/80 shadow-xs sticky top-20 z-30 max-h-[calc(100vh-6rem)] overflow-hidden">
             {/* Sticky Header inside sidebar */}
             <div className="flex items-center justify-between p-5 pb-4 border-b border-neutral-200/80 bg-white shrink-0 z-10">
               <div className="flex items-center gap-2 font-black text-neutral-900 text-sm tracking-tight uppercase">
                 <SlidersHorizontal className="w-4 h-4 text-[#8A1538]" />
-                <span>Filters</span>
+                <span>{tShop("filters")}</span>
               </div>
               {activeFiltersCount > 0 && (
                 <button
@@ -874,27 +1141,27 @@ function matchCategoryOrSlug(
                   onClick={handleClearAllFilters}
                   className="text-[11px] font-bold text-[#8A1538] hover:underline cursor-pointer"
                 >
-                  Reset ({activeFiltersCount})
+                  {tShop("resetCount", { count: activeFiltersCount })}
                 </button>
               )}
             </div>
 
             {/* Scrollable Filter Controls */}
-            <div className="p-5 pt-4 overflow-y-auto flex-1 overscroll-contain pr-4 space-y-6 custom-scrollbar">
+            <div className="p-5 pt-4 overflow-y-auto flex-1 overscroll-contain pe-4 space-y-6 custom-scrollbar">
               {renderFilterControls()}
             </div>
           </aside>
 
-          {/* Right Product Grid (9 cols) */}
+          {/* End Product Grid (9 cols) */}
           <main className="lg:col-span-9 flex-1">
             {filteredAndSortedProducts.length === 0 ? (
               <div className="text-center py-16 px-4 rounded-3xl bg-white border border-dashed border-neutral-300 shadow-xs">
                 <PackageOpen className="w-14 h-14 mx-auto text-neutral-400 mb-3" />
                 <h3 className="text-lg font-bold text-neutral-800">
-                  No products match your filters
+                  {tShop("noProductsMatch")}
                 </h3>
                 <p className="text-xs sm:text-sm text-neutral-500 max-w-sm mx-auto mt-1 mb-6">
-                  Try adjusting your search query, clearing specific category or price filters to see more results.
+                  {tShop("tryAdjustingFilters")}
                 </p>
                 <button
                   type="button"
@@ -902,7 +1169,7 @@ function matchCategoryOrSlug(
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#8A1538] text-white text-xs font-bold shadow hover:bg-[#720e2c] transition-all cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  <span>Reset All Filters</span>
+                  <span>{tShop("resetAllFilters")}</span>
                 </button>
               </div>
             ) : (
@@ -917,27 +1184,48 @@ function matchCategoryOrSlug(
         </div>
       </div>
 
-      {/* ── Mobile Slide-Out Filter Drawer ── */}
-      {mobileFilterOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex justify-end animate-fade-in">
+      {/* ── Mobile Slide-Out Filter Drawer (Strict-Mode-Safe Portal) ── */}
+      {isDrawerMounted && typeof document !== "undefined" && createPortal(
+        <div ref={portalRootRef} className="fixed inset-0 z-[9999] lg:hidden flex justify-end">
           {/* Dark Backdrop */}
           <div
-            onClick={() => setMobileFilterOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+            onClick={closeMobileDrawer}
+            aria-hidden="true"
+            className={`fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300 ${
+              isDrawerVisible ? "opacity-100" : "opacity-0"
+            }`}
           />
 
           {/* Slide panel */}
-          <div className="relative z-50 w-80 sm:w-96 h-full bg-white shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
+          <div
+            id="mobile-filter-drawer"
+            ref={drawerPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={tShop("filterCatalog")}
+            tabIndex={-1}
+            onTransitionEnd={(e) => {
+              if (e.target === e.currentTarget && drawerPhaseRef.current === "closing") {
+                drawerPhaseRef.current = "closed";
+                setDrawerPhase("closed");
+              }
+            }}
+            className={`relative z-[10000] w-80 sm:w-96 h-full bg-white shadow-2xl flex flex-col justify-between overflow-hidden transition-transform duration-300 ease-out focus:outline-none ${
+              isDrawerVisible ? "translate-x-0" : "translate-x-full rtl:-translate-x-full"
+            }`}
+          >
             {/* Drawer Header */}
             <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
               <div className="flex items-center gap-2 font-bold text-neutral-900 text-sm">
                 <SlidersHorizontal className="w-4 h-4 text-[#8A1538]" />
-                <span>Filter Catalog</span>
+                <span>{tShop("filterCatalog")}</span>
               </div>
               <button
+                ref={closeButtonRef}
                 type="button"
-                onClick={() => setMobileFilterOpen(false)}
+                onClick={closeMobileDrawer}
                 className="p-1.5 rounded-full bg-neutral-200 text-neutral-700 hover:bg-neutral-300"
+                aria-label={tCommon("close")}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -953,20 +1241,21 @@ function matchCategoryOrSlug(
               <button
                 type="button"
                 onClick={handleClearAllFilters}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-neutral-200 text-neutral-800 font-bold text-xs"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-neutral-200 text-neutral-800 font-bold text-xs cursor-pointer"
               >
-                Reset
+                {tShop("reset")}
               </button>
               <button
                 type="button"
-                onClick={() => setMobileFilterOpen(false)}
-                className="flex-2 py-2.5 px-4 rounded-xl bg-[#8A1538] text-white font-bold text-xs shadow-md"
+                onClick={closeMobileDrawer}
+                className="flex-2 py-2.5 px-4 rounded-xl bg-[#8A1538] text-white font-bold text-xs shadow-md cursor-pointer"
               >
-                Show {filteredAndSortedProducts.length} Products
+                {tShop("showProductsCount", { count: filteredAndSortedProducts.length })}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
