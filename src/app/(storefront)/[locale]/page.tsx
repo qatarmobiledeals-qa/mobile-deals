@@ -1,5 +1,6 @@
 import React from "react";
 import { Metadata } from "next";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
   getBanners,
   getCategories,
@@ -31,8 +32,16 @@ export async function generateMetadata({
   const { locale } = await params;
   const isArabic = locale === "ar";
   const baseUrl = "https://mobiledealsqa.com";
+  const [tMeta, tCommon] = await Promise.all([
+    getTranslations({ locale, namespace: "metadata" }),
+    getTranslations({ locale, namespace: "common" }),
+  ]);
 
   return {
+    title: {
+      absolute: tMeta("siteTitle"),
+    },
+    description: tMeta("siteDescription"),
     alternates: {
       canonical: `${baseUrl}/${locale}`,
       languages: {
@@ -42,18 +51,15 @@ export async function generateMetadata({
       },
     },
     openGraph: {
-      title: isArabic
-        ? "موبايل ديلز قطر | أفضل عروض الهواتف والإلكترونيات والدفع عند الاستلام"
-        : "Mobile Deals Qatar | Best Tech Deals & Cash on Delivery",
-      description: isArabic
-        ? "المتجر الرائد في قطر للهواتف والإلكترونيات والساعات الذكية والإكسسوارات. أفضل الأسعار، منتجات أصلية، والدفع عند الاستلام."
-        : "Qatar's premier store for mobiles, electronics, smartwatches, accessories and gadgets. Unbeatable prices, 100% genuine tech, Cash on Delivery nationwide.",
+      title: tMeta("homeTitle"),
+      description: tMeta("homeDescription"),
       url: `${baseUrl}/${locale}`,
+      locale: isArabic ? "ar_QA" : "en_QA",
       type: "website",
       images: [
         {
           url: "https://mobiledealsqa.com/fav-icon.png",
-          alt: "Mobile Deals Qatar",
+          alt: tCommon("storeNameQatar"),
           width: 512,
           height: 512,
         },
@@ -62,9 +68,17 @@ export async function generateMetadata({
   };
 }
 
-export default async function HomePage() {
+export default async function HomePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const baseUrl = "https://mobiledealsqa.com";
+
   // Efficient parallel data fetching: single round-trip execution
-  const [categories, banners, bestDeals, todayDeals, featuredProducts, settings] =
+  const [categories, banners, bestDeals, todayDeals, featuredProducts, settings, tMeta, tCommon] =
     await Promise.all([
       getCategories(),
       getBanners(),
@@ -72,17 +86,20 @@ export default async function HomePage() {
       getTodayDeals(),
       getFeaturedProducts(),
       getSiteSettings(),
+      getTranslations({ locale, namespace: "metadata" }),
+      getTranslations({ locale, namespace: "common" }),
     ]);
 
+  const localizedStoreName = tCommon("storeNameQatar");
+  const localizedDescription = tMeta("siteDescription");
 
   const organizationJsonLd = {
     "@context": "https://schema.org",
     "@type": "OnlineStore",
-    name: "Mobile Deals Qatar",
-    url: "https://mobiledealsqa.com",
+    name: localizedStoreName,
+    url: `${baseUrl}/${locale}`,
     logo: "https://mobiledealsqa.com/fav-icon.png",
-    description:
-      "Qatar's premier online destination for mobile phones, electronics, smartwatches, and accessories with Cash on Delivery nationwide.",
+    description: localizedDescription,
     telephone: settings.whatsapp_number || "+97455000000",
     email: settings.store_email || "support@mobiledealsqa.com",
     address: {
@@ -98,13 +115,13 @@ export default async function HomePage() {
   const websiteJsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "Mobile Deals Qatar",
-    url: "https://mobiledealsqa.com",
+    name: localizedStoreName,
+    url: `${baseUrl}/${locale}`,
     potentialAction: {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: "https://mobiledealsqa.com/search?q={search_term_string}",
+        urlTemplate: `${baseUrl}/${locale}/search?q={search_term_string}`,
       },
       "query-input": "required name=search_term_string",
     },
@@ -123,10 +140,17 @@ export default async function HomePage() {
       />
 
       {/* 1. Top Announcement Bar */}
-      <AnnouncementBar items={settings.announcement_bar?.items} />
+      <AnnouncementBar
+        items={settings.announcement_bar?.items}
+        itemsAr={settings.announcement_bar?.items_ar}
+        currency={settings.currency}
+      />
 
       {/* 2. Main Sticky Navbar */}
-      <MainNavbar whatsappNumber={settings.whatsapp_number} />
+      <MainNavbar
+        whatsappNumber={settings.whatsapp_number}
+        currency={settings.currency}
+      />
 
       {/* 3. Horizontal Category Navigation */}
       <CategoryNav categories={categories} />

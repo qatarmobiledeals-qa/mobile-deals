@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Category } from "@/types/database";
 import { Logo } from "@/components/ui/logo";
 import { Mail, MapPin, Phone, ChevronDown } from "lucide-react";
+import { resolveCategoryContent } from "@/lib/i18n/content-resolver";
 
 interface FooterProps {
   whatsappNumber?: string;
@@ -12,21 +14,23 @@ interface FooterProps {
   categories?: Category[];
 }
 
-const defaultCategories = [
-  { name: "Smartphones", slug: "smartphones" },
-  { name: "Earphones & Buds", slug: "earphones-buds" },
-  { name: "Charger & Adapter", slug: "charger-adapter" },
-  { name: "Mobile & Tablet Holder", slug: "mobile-tablet-holder" },
-  { name: "Keyboard & Mouse", slug: "keyboard-mouse" },
-  { name: "Watch & Straps", slug: "watch-straps" },
-];
-
 export function Footer({
   whatsappNumber = "+97455000000",
   storeEmail = "support@mobiledeals.qa",
   categories = [],
 }: FooterProps) {
+  const locale = useLocale();
+  const t = useTranslations("footer");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  const defaultCategories = [
+    { name: t("defaultCategories.smartphones"), slug: "smartphones" },
+    { name: t("defaultCategories.earphonesBuds"), slug: "earphones-buds" },
+    { name: t("defaultCategories.chargerAdapter"), slug: "charger-adapter" },
+    { name: t("defaultCategories.mobileTabletHolder"), slug: "mobile-tablet-holder" },
+    { name: t("defaultCategories.keyboardMouse"), slug: "keyboard-mouse" },
+    { name: t("defaultCategories.watchStraps"), slug: "watch-straps" },
+  ];
 
   const toggleSection = (section: string) => {
     setOpenSections((prev) => ({
@@ -36,7 +40,13 @@ export function Footer({
   };
 
   const whatsappCleanNumber = whatsappNumber.replace(/[^\d]/g, "");
-  const displayCategories = categories.length > 0 ? categories.slice(0, 7) : defaultCategories;
+  const displayCategories =
+    categories.length > 0
+      ? categories.slice(0, 7).map((cat) => ({
+          slug: cat.slug,
+          name: resolveCategoryContent(cat, locale).displayName,
+        }))
+      : defaultCategories;
 
   return (
     <footer className="bg-neutral-950 text-neutral-300 border-t border-neutral-800 text-xs">
@@ -48,8 +58,7 @@ export function Footer({
               <Logo size="md" />
             </div>
             <p className="text-neutral-400 text-xs leading-relaxed max-w-sm">
-              Mobile Deals is Qatar&apos;s premier online destination for mobile phones, electronics,
-              accessories, and gadgets with guaranteed Cash on Delivery across Qatar.
+              {t("aboutText")}
             </p>
           </div>
 
@@ -58,10 +67,10 @@ export function Footer({
             <button
               type="button"
               onClick={() => toggleSection("categories")}
-              className="w-full py-2 md:py-0 flex items-center justify-between text-left font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
+              className="w-full py-2 md:py-0 flex items-center justify-between text-start font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
               aria-expanded={!!openSections["categories"]}
             >
-              <span>Categories</span>
+              <span>{t("categories")}</span>
               <ChevronDown
                 className={`w-4 h-4 text-neutral-400 transition-transform duration-200 md:hidden ${
                   openSections["categories"] ? "rotate-180 text-white" : ""
@@ -89,7 +98,7 @@ export function Footer({
                     href="/shop"
                     className="text-[#8A1538] hover:text-rose-400 font-semibold transition-colors inline-block pt-1"
                   >
-                    View All Categories →
+                    {t("viewAllCategories")} {locale === "ar" ? "←" : "→"}
                   </Link>
                 </li>
               </ul>
@@ -101,10 +110,10 @@ export function Footer({
             <button
               type="button"
               onClick={() => toggleSection("quickLinks")}
-              className="w-full py-2 md:py-0 flex items-center justify-between text-left font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
+              className="w-full py-2 md:py-0 flex items-center justify-between text-start font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
               aria-expanded={!!openSections["quickLinks"]}
             >
-              <span>Quick Links</span>
+              <span>{t("quickLinks")}</span>
               <ChevronDown
                 className={`w-4 h-4 text-neutral-400 transition-transform duration-200 md:hidden ${
                   openSections["quickLinks"] ? "rotate-180 text-white" : ""
@@ -119,22 +128,22 @@ export function Footer({
               <ul className="space-y-2 text-neutral-400">
                 <li>
                   <Link href="/about" className="hover:text-white transition-colors block py-0.5 md:py-0">
-                    About Us
+                    {t("aboutUs")}
                   </Link>
                 </li>
                 <li>
                   <Link href="/shop" className="hover:text-white transition-colors block py-0.5 md:py-0">
-                    Shop Catalog
+                    {t("shopCatalog")}
                   </Link>
                 </li>
                 <li>
                   <Link href="/#deals" className="hover:text-white transition-colors block py-0.5 md:py-0">
-                    Today&apos;s Best Deals
+                    {t("todaysBestDeals")}
                   </Link>
                 </li>
                 <li>
                   <Link href="/cart" className="hover:text-white transition-colors block py-0.5 md:py-0">
-                    My Shopping Cart
+                    {t("myShoppingCart")}
                   </Link>
                 </li>
               </ul>
@@ -146,10 +155,10 @@ export function Footer({
             <button
               type="button"
               onClick={() => toggleSection("customerCare")}
-              className="w-full py-2 md:py-0 flex items-center justify-between text-left font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
+              className="w-full py-2 md:py-0 flex items-center justify-between text-start font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
               aria-expanded={!!openSections["customerCare"]}
             >
-              <span>Customer Policies</span>
+              <span>{t("customerPolicies")}</span>
               <ChevronDown
                 className={`w-4 h-4 text-neutral-400 transition-transform duration-200 md:hidden ${
                   openSections["customerCare"] ? "rotate-180 text-white" : ""
@@ -164,27 +173,29 @@ export function Footer({
               <ul className="space-y-2 text-neutral-400">
                 <li>
                   <Link href="/privacy-policy" className="hover:text-white transition-colors block py-0.5 md:py-0">
-                    Privacy Policy
+                    {t("privacyPolicy")}
                   </Link>
                 </li>
                 <li>
                   <Link href="/return-policy" className="hover:text-white transition-colors block py-0.5 md:py-0">
-                    Return Policy
+                    {t("returnPolicy")}
                   </Link>
                 </li>
                 <li>
                   <Link href="/service-enquiry" className="hover:text-white transition-colors block py-0.5 md:py-0">
-                    Service &amp; Maintenance
+                    {t("serviceAndMaintenance")}
                   </Link>
                 </li>
                 <li>
                   <a
-                    href={`https://wa.me/${whatsappCleanNumber}?text=Hello%20Mobile%20Deals%20Support`}
+                    href={`https://wa.me/${whatsappCleanNumber}?text=${encodeURIComponent(
+                      t("whatsappSupportMessage")
+                    )}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:text-white transition-colors block py-0.5 md:py-0"
                   >
-                    WhatsApp Direct Help
+                    {t("whatsappDirectHelp")}
                   </a>
                 </li>
               </ul>
@@ -196,10 +207,10 @@ export function Footer({
             <button
               type="button"
               onClick={() => toggleSection("contactInfo")}
-              className="w-full py-2 md:py-0 flex items-center justify-between text-left font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
+              className="w-full py-2 md:py-0 flex items-center justify-between text-start font-bold text-white text-sm tracking-wider uppercase md:cursor-default"
               aria-expanded={!!openSections["contactInfo"]}
             >
-              <span>Contact &amp; Location</span>
+              <span>{t("contactAndLocation")}</span>
               <ChevronDown
                 className={`w-4 h-4 text-neutral-400 transition-transform duration-200 md:hidden ${
                   openSections["contactInfo"] ? "rotate-180 text-white" : ""
@@ -214,19 +225,19 @@ export function Footer({
               <div className="space-y-2.5 text-neutral-400">
                 <div className="flex items-start gap-2">
                   <MapPin className="w-4 h-4 text-[#8A1538] shrink-0 mt-0.5" />
-                  <span>Doha, State of Qatar</span>
+                  <span>{t("locationDoha")}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-[#8A1538] shrink-0" />
-                  <span>{whatsappNumber}</span>
+                  <span dir="ltr">{whatsappNumber}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Mail className="w-4 h-4 text-[#8A1538] shrink-0" />
-                  <span>{storeEmail}</span>
+                  <span dir="ltr">{storeEmail}</span>
                 </div>
                 <div className="pt-2">
                   <span className="inline-block px-2.5 py-1 rounded bg-[#8A1538]/30 border border-[#8A1538]/50 text-white font-semibold text-[11px]">
-                    Cash on Delivery Across Qatar
+                    {t("codAcrossQatar")}
                   </span>
                 </div>
               </div>
@@ -236,9 +247,9 @@ export function Footer({
 
         {/* Bottom bar */}
         <div className="mt-8 md:mt-12 pt-6 border-t border-neutral-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-neutral-500">
-          <p>© {new Date().getFullYear()} MOBILE DEALS. All rights reserved. Doha, Qatar.</p>
+          <p>{t("copyrightNotice", { year: new Date().getFullYear() })}</p>
           <div className="flex items-center gap-1.5 text-neutral-400">
-            <span>Crafted by</span>
+            <span>{t("craftedBy")}</span>
             <a
               href="https://www.ekodrix.com/"
               target="_blank"

@@ -1,7 +1,10 @@
 import React, { Suspense } from "react";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getAllProducts, getCategories, getBrands, getSiteSettings } from "@/lib/data";
+import { resolveCategoryContent } from "@/lib/i18n/content-resolver";
+import type { Category } from "@/types/database";
 import { AnnouncementBar } from "@/components/store/announcement-bar";
 import { MainNavbar } from "@/components/store/main-navbar";
 import { CategoryNav } from "@/components/store/category-nav";
@@ -28,7 +31,7 @@ export async function generateStaticParams() {
   }
 }
 
-function findCategory(categories: any[], slugParam: string) {
+function findCategory(categories: Category[], slugParam: string) {
   if (!slugParam) return undefined;
   const decoded = decodeURIComponent(slugParam).trim().toLowerCase();
   
@@ -70,23 +73,21 @@ function findCategory(categories: any[], slugParam: string) {
 
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { locale, slug } = await params;
-  const categories = await getCategories();
+  const [categories, tShop] = await Promise.all([
+    getCategories(),
+    getTranslations({ locale, namespace: "shop" }),
+  ]);
   const category = findCategory(categories, slug);
-  if (!category) return { title: "Category Not Found" };
+  if (!category) return { title: tShop("categoryNotFound") };
   const baseUrl = "https://mobiledealsqa.com";
   const isArabic = locale === "ar";
-  const name = (isArabic && category.name_ar?.trim()) ? category.name_ar.trim() : category.name;
-  const description = (isArabic && category.description_ar?.trim())
-    ? category.description_ar.trim()
-    : category.description ||
-      (isArabic
-        ? `تسوق أفضل منتجات ${name} في قطر مع موبايل ديلز. منتجات أصلية، أفضل الأسعار، والدفع عند الاستلام.`
-        : `Shop the best ${name} in Qatar at Mobile Deals. Genuine products, unbeatable prices, and Cash on Delivery nationwide.`);
+  const resolvedCategory = resolveCategoryContent(category, locale);
+  const name = resolvedCategory.displayName;
+  const description =
+    resolvedCategory.displayDescription || tShop("categoryMetaDescription", { name });
 
   const canonicalUrl = `${baseUrl}/${locale}/categories/${category.slug}`;
-  const title = isArabic
-    ? `${name} في قطر | موبايل ديلز قطر`
-    : `${name} in Qatar | Mobile Deals Qatar`;
+  const title = tShop("categoryMetaTitle", { name });
 
   return {
     title,
@@ -113,14 +114,23 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 export const revalidate = 86400; // 24 hours (prevents ISR write spikes under Meta ad traffic)
 
 export default async function CategoryDetailPage({ params }: CategoryPageProps) {
-  const { slug } = await params;
-  const [products, categories, brands, settings] = await Promise.all([
-    getAllProducts(), getCategories(), getBrands(), getSiteSettings(),
+  const { locale, slug } = await params;
+  setRequestLocale(locale);
+
+  const [products, categories, brands, settings, tNav, tCommon] = await Promise.all([
+    getAllProducts(),
+    getCategories(),
+    getBrands(),
+    getSiteSettings(),
+    getTranslations({ locale, namespace: "nav" }),
+    getTranslations({ locale, namespace: "common" }),
   ]);
   const category = findCategory(categories, slug);
   if (!category) notFound();
 
-  const categoryUrl = `https://mobiledealsqa.com/categories/${category.slug}`;
+  const resolvedCategory = resolveCategoryContent(category, locale);
+  const baseUrl = "https://mobiledealsqa.com";
+  const categoryUrl = `${baseUrl}/${locale}/categories/${category.slug}`;
 
   // BreadcrumbList Structured Data
   const breadcrumbJsonLd = {
@@ -130,19 +140,19 @@ export default async function CategoryDetailPage({ params }: CategoryPageProps) 
       {
         "@type": "ListItem",
         position: 1,
-        name: "Home",
-        item: "https://mobiledealsqa.com",
+        name: tNav("home"),
+        item: `${baseUrl}/${locale}`,
       },
       {
         "@type": "ListItem",
         position: 2,
-        name: "Shop",
-        item: "https://mobiledealsqa.com/shop",
+        name: tNav("shop"),
+        item: `${baseUrl}/${locale}/shop`,
       },
       {
         "@type": "ListItem",
         position: 3,
-        name: category.name,
+        name: resolvedCategory.displayName,
         item: categoryUrl,
       },
     ],
@@ -155,18 +165,29 @@ export default async function CategoryDetailPage({ params }: CategoryPageProps) 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <AnnouncementBar items={settings.announcement_bar?.items} />
+      <AnnouncementBar
+        items={settings.announcement_bar?.items}
+        itemsAr={settings.announcement_bar?.items_ar}
+        currency={settings.currency}
+      />
       <MainNavbar whatsappNumber={settings.whatsapp_number} currency={settings.currency} />
       <CategoryNav categories={categories} />
       <main className="flex-1">
-        <Suspense fallback={<div className="flex flex-col items-center justify-center py-24 gap-3"><Loader2 className="w-8 h-8 animate-spin text-[#8A1538]" /><p className="text-xs font-semibold text-neutral-500">Loading catalog...</p></div>}>
+        <Suspense
+          fallback={
+            <div className="flex flex-col items-center justify-center py-24 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-[#8A1538]" />
+              <p className="text-xs font-semibold text-neutral-500">{tCommon("loadingCatalog")}</p>
+            </div>
+          }
+        >
           <ShopCatalogClient
             initialProducts={products}
             categories={categories}
             brands={brands}
             currency={settings.currency}
             initialCategory={category.slug}
-            initialCategoryName={category.name}
+            initialCategoryName={resolvedCategory.displayName}
           />
         </Suspense>
       </main>

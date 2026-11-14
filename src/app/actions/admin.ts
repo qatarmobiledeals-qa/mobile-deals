@@ -20,6 +20,20 @@ function revalidateStorefrontPath(path: string) {
   revalidatePath(`/ar${clean === "/" ? "" : clean}`);
 }
 
+function revalidateStorefrontPaths(paths: string[]) {
+  const uniquePaths = Array.from(new Set(paths.filter(Boolean)));
+  for (const path of uniquePaths) {
+    revalidateStorefrontPath(path);
+  }
+}
+
+function extractCategorySlug(record: unknown): string | null {
+  if (!record || typeof record !== "object") return null;
+  const rel = (record as { category?: { slug?: string | null } | Array<{ slug?: string | null }> | null }).category;
+  const rawSlug = Array.isArray(rel) ? rel[0]?.slug : rel?.slug;
+  return rawSlug?.trim() || null;
+}
+
 /* ======================================================================
    PRODUCT ACTIONS
    ====================================================================== */
@@ -153,17 +167,23 @@ export async function createProductAction(data: ProductInputPayload) {
       if (varErr) throw varErr;
     }
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/shop");
-    revalidatePath("/admin");
-    revalidatePath("/admin/products");
-
     // Fetch refreshed product with relations
     const { data: createdProduct } = await supabase
       .from("products")
       .select("*, category:categories(*), brand:brands(*), product_images(*), product_variants(*)")
       .eq("id", product.id)
       .single();
+
+    revalidateStorefrontPaths([
+      "/",
+      "/shop",
+      `/products/${data.slug.trim()}`,
+      ...(createdProduct?.category?.slug
+        ? [`/categories/${createdProduct.category.slug}`]
+        : []),
+    ]);
+    revalidatePath("/admin");
+    revalidatePath("/admin/products");
 
     return { success: true, id: product.id, data: createdProduct };
   } catch (err: unknown) {
@@ -181,10 +201,10 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
 
     const supabase = createAdminClient();
 
-    // Fetch existing product for comparative audit
+    // Fetch existing product for comparative audit and prior category slug
     const { data: existingProduct, error: fetchErr } = await supabase
       .from("products")
-      .select("*")
+      .select("*, category:categories(slug)")
       .eq("id", id)
       .single();
 
@@ -331,13 +351,17 @@ export async function updateProductAction(id: string, data: Partial<ProductInput
       .eq("id", id)
       .single();
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/shop");
-    if (updatedProduct?.slug) {
-      revalidateStorefrontPath(`/products/${updatedProduct.slug}`);
-    } else if (data.slug) {
-      revalidateStorefrontPath(`/products/${data.slug}`);
-    }
+    const resolvedSlug = updatedProduct?.slug || data.slug?.trim();
+    const previousCategorySlug = extractCategorySlug(existingProduct);
+    const updatedCategorySlug = extractCategorySlug(updatedProduct);
+    revalidateStorefrontPaths([
+      "/",
+      "/shop",
+      ...(existingProduct.slug ? [`/products/${existingProduct.slug}`] : []),
+      ...(resolvedSlug ? [`/products/${resolvedSlug}`] : []),
+      ...(previousCategorySlug ? [`/categories/${previousCategorySlug}`] : []),
+      ...(updatedCategorySlug ? [`/categories/${updatedCategorySlug}`] : []),
+    ]);
     revalidatePath("/admin");
     revalidatePath("/admin/products");
 
@@ -362,10 +386,10 @@ export async function deleteProductAction(id: string) {
       .select("image_url, cloudinary_public_id")
       .eq("product_id", id);
 
-    // 2. Fetch product specs to check if gift_image exists
+    // 2. Fetch product slug, category slug, and specs before deletion
     const { data: product } = await supabase
       .from("products")
-      .select("specifications")
+      .select("slug, specifications, category:categories(slug)")
       .eq("id", id)
       .maybeSingle();
 
@@ -397,8 +421,13 @@ export async function deleteProductAction(id: string) {
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/shop");
+    const categorySlug = extractCategorySlug(product);
+    revalidateStorefrontPaths([
+      "/",
+      "/shop",
+      ...(product?.slug ? [`/products/${product.slug}`] : []),
+      ...(categorySlug ? [`/categories/${categorySlug}`] : []),
+    ]);
     revalidatePath("/admin");
     revalidatePath("/admin/products");
     return { success: true };
@@ -410,14 +439,25 @@ export async function deleteProductAction(id: string) {
 export async function toggleProductActiveAction(id: string, currentStatus: boolean) {
   try {
     const supabase = createAdminClient();
+    const { data: product } = await supabase
+      .from("products")
+      .select("slug, category:categories(slug)")
+      .eq("id", id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("products")
       .update({ is_active: !currentStatus })
       .eq("id", id);
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/shop");
+    const categorySlug = extractCategorySlug(product);
+    revalidateStorefrontPaths([
+      "/",
+      "/shop",
+      ...(product?.slug ? [`/products/${product.slug}`] : []),
+      ...(categorySlug ? [`/categories/${categorySlug}`] : []),
+    ]);
     revalidatePath("/admin/products");
     return { success: true };
   } catch (err: unknown) {
@@ -452,6 +492,7 @@ export async function createBrandAction(data: {
     });
     if (error) throw error;
 
+    revalidateStorefrontPaths(["/", "/shop"]);
     revalidatePath("/admin/brands");
     revalidatePath("/admin/products");
     return { success: true };
@@ -481,6 +522,7 @@ export async function updateBrandAction(
     const { error } = await supabase.from("brands").update(updatePayload).eq("id", id);
     if (error) throw error;
 
+    revalidateStorefrontPaths(["/", "/shop"]);
     revalidatePath("/admin/brands");
     revalidatePath("/admin/products");
     return { success: true };
@@ -511,6 +553,7 @@ export async function deleteBrandAction(id: string) {
     const { error } = await supabase.from("brands").delete().eq("id", id);
     if (error) throw error;
 
+    revalidateStorefrontPaths(["/", "/shop"]);
     revalidatePath("/admin/brands");
     revalidatePath("/admin/products");
     return { success: true };
@@ -528,6 +571,7 @@ export async function toggleBrandActiveAction(id: string, currentStatus: boolean
       .eq("id", id);
     if (error) throw error;
 
+    revalidateStorefrontPaths(["/", "/shop"]);
     revalidatePath("/admin/brands");
     return { success: true };
   } catch (err: unknown) {
@@ -569,9 +613,12 @@ export async function createCategoryAction(data: {
     });
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/shop");
-    revalidateStorefrontPath("/categories");
+    revalidateStorefrontPaths([
+      "/",
+      "/shop",
+      "/categories",
+      `/categories/${data.slug.trim()}`,
+    ]);
     revalidatePath("/admin/categories");
     return { success: true };
   } catch (err: unknown) {
@@ -599,6 +646,12 @@ export async function updateCategoryAction(
       return { success: false, error: "Unauthorized: Admin session required." };
     }
     const supabase = createAdminClient();
+    const { data: existingCat } = await supabase
+      .from("categories")
+      .select("slug")
+      .eq("id", id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("categories")
       .update({
@@ -610,9 +663,13 @@ export async function updateCategoryAction(
       .eq("id", id);
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/shop");
-    revalidateStorefrontPath("/categories");
+    revalidateStorefrontPaths([
+      "/",
+      "/shop",
+      "/categories",
+      ...(existingCat?.slug ? [`/categories/${existingCat.slug}`] : []),
+      ...(data.slug ? [`/categories/${data.slug.trim()}`] : []),
+    ]);
     revalidatePath("/admin/categories");
     return { success: true };
   } catch (err: unknown) {
@@ -631,7 +688,7 @@ export async function deleteCategoryAction(id: string) {
     // Purge category image from Cloudinary
     const { data: cat } = await supabase
       .from("categories")
-      .select("image_url")
+      .select("slug, image_url")
       .eq("id", id)
       .maybeSingle();
 
@@ -646,9 +703,12 @@ export async function deleteCategoryAction(id: string) {
     const { error } = await supabase.from("categories").delete().eq("id", id);
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/shop");
-    revalidateStorefrontPath("/categories");
+    revalidateStorefrontPaths([
+      "/",
+      "/shop",
+      "/categories",
+      ...(cat?.slug ? [`/categories/${cat.slug}`] : []),
+    ]);
     revalidatePath("/admin/categories");
     return { success: true };
   } catch (err: unknown) {
@@ -708,7 +768,7 @@ export async function createBannerAction(data: {
     });
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
+    revalidateStorefrontPaths(["/"]);
     revalidatePath("/admin/banners");
     return { success: true };
   } catch (err: unknown) {
@@ -761,7 +821,7 @@ export async function updateBannerAction(
       .eq("id", id);
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
+    revalidateStorefrontPaths(["/"]);
     revalidatePath("/admin/banners");
     return { success: true };
   } catch (err: unknown) {
@@ -802,7 +862,7 @@ export async function deleteBannerAction(id: string) {
     const { error } = await supabase.from("banners").delete().eq("id", id);
     if (error) throw error;
 
-    revalidateStorefrontPath("/");
+    revalidateStorefrontPaths(["/"]);
     revalidatePath("/admin/banners");
     return { success: true };
   } catch (err: unknown) {
@@ -892,9 +952,7 @@ export async function updateSiteSettingsAction(settings: Partial<SiteSettings>) 
       });
     }
 
-    revalidateStorefrontPath("/");
-    revalidateStorefrontPath("/checkout");
-    revalidateStorefrontPath("/cart");
+    revalidateStorefrontPaths(["/", "/shop", "/checkout", "/cart"]);
     revalidatePath("/admin/settings");
     return { success: true };
   } catch (err: unknown) {
@@ -1109,7 +1167,7 @@ export async function seedInitialDataAction() {
       }
     }
 
-    revalidateStorefrontPath("/");
+    revalidateStorefrontPaths(["/", "/shop"]);
     revalidatePath("/admin");
     return { success: true };
   } catch (err: unknown) {

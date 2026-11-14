@@ -1,8 +1,10 @@
 import React from "react";
 import { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { notFound } from "next/navigation";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getProductBySlug, getSiteSettings, getAllProducts } from "@/lib/data";
+import { resolveProductContent } from "@/lib/i18n/content-resolver";
 import { AnnouncementBar } from "@/components/store/announcement-bar";
 import { MainNavbar } from "@/components/store/main-navbar";
 import { ProductGallery } from "@/components/store/product-gallery";
@@ -39,35 +41,34 @@ export async function generateMetadata({
   params,
 }: ProductPageProps): Promise<Metadata> {
   const { locale, slug } = await params;
-  const product = await getProductBySlug(slug);
+  const [product, tProduct, tCommon] = await Promise.all([
+    getProductBySlug(slug),
+    getTranslations({ locale, namespace: "product" }),
+    getTranslations({ locale, namespace: "common" }),
+  ]);
 
   if (!product) {
     return {
-      title: "Product Not Found",
+      title: tProduct("productNotFound"),
     };
   }
 
   const isArabic = locale === "ar";
-  const name = (isArabic && product.name_ar?.trim()) ? product.name_ar.trim() : product.name;
-  const shortDesc = (isArabic && product.short_description_ar?.trim())
-    ? product.short_description_ar.trim()
-    : product.short_description;
+  const resolvedProduct = resolveProductContent(product, locale);
+  const name = resolvedProduct.displayName;
+  const shortDesc = resolvedProduct.displayShortDescription;
 
-  const primaryImage =
-    product.product_images?.find((img) => img.is_primary)?.image_url ||
-    product.product_images?.[0]?.image_url;
+  const primaryImgObj =
+    resolvedProduct.product_images?.find((img) => img.is_primary) ||
+    resolvedProduct.product_images?.[0];
+  const primaryImage = primaryImgObj?.image_url;
+  const primaryImageAlt = primaryImgObj?.displayAltText || name;
 
   const baseUrl = "https://mobiledealsqa.com";
   const canonicalUrl = `${baseUrl}/${locale}/products/${product.slug}`;
 
-  const metaTitle = isArabic
-    ? `${name} | أفضل سعر في قطر`
-    : `${name} | Best Price in Qatar`;
-  const metaDesc =
-    shortDesc ||
-    (isArabic
-      ? `اشترِ ${name} من موبايل ديلز قطر مع الدفع عند الاستلام وتوصيل سريع.`
-      : `Buy ${name} at Mobile Deals Qatar with Cash on Delivery and fast doorstep shipping.`);
+  const metaTitle = tProduct("metaTitleSuffix", { name });
+  const metaDesc = shortDesc || tProduct("metaDescFallback", { name });
 
   return {
     title: metaTitle,
@@ -81,12 +82,12 @@ export async function generateMetadata({
       },
     },
     openGraph: {
-      title: isArabic ? `${name} | موبايل ديلز قطر` : `${name} | Mobile Deals Qatar`,
+      title: `${name} | ${tCommon("storeNameQatar")}`,
       description: metaDesc,
       url: canonicalUrl,
       locale: isArabic ? "ar_QA" : "en_QA",
       type: "website",
-      images: primaryImage ? [{ url: primaryImage, alt: name }] : [],
+      images: primaryImage ? [{ url: primaryImage, alt: primaryImageAlt }] : [],
     },
     twitter: {
       card: "summary_large_image" as const,
@@ -98,34 +99,43 @@ export async function generateMetadata({
 }
 
 export default async function ProductDetailPage({ params }: ProductPageProps) {
-  const { slug } = await params;
-  const [product, settings] = await Promise.all([
+  const { locale, slug } = await params;
+  setRequestLocale(locale);
+
+  const [product, settings, tNav, tCommon] = await Promise.all([
     getProductBySlug(slug),
     getSiteSettings(),
+    getTranslations({ locale, namespace: "nav" }),
+    getTranslations({ locale, namespace: "common" }),
   ]);
 
   if (!product) {
     notFound();
   }
 
+  const resolvedProduct = resolveProductContent(product, locale);
   const primaryImage =
-    product.product_images?.find((img) => img.is_primary)?.image_url ||
-    product.product_images?.[0]?.image_url;
+    resolvedProduct.product_images?.find((img) => img.is_primary)?.image_url ||
+    resolvedProduct.product_images?.[0]?.image_url;
 
-  const productUrl = `https://mobiledealsqa.com/products/${product.slug}`;
+  const baseUrl = "https://mobiledealsqa.com";
+  const productUrl = `${baseUrl}/${locale}/products/${product.slug}`;
 
   // JSON-LD Structured Data for Google Product Schema
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
-    name: product.name,
-    description: product.description || product.short_description || product.name,
+    name: resolvedProduct.displayName,
+    description:
+      resolvedProduct.displayDescription ||
+      resolvedProduct.displayShortDescription ||
+      resolvedProduct.displayName,
     image: primaryImage ? [primaryImage] : [],
     url: productUrl,
     sku: product.id,
     brand: {
       "@type": "Brand",
-      name: product.brand?.name || "Mobile Deals",
+      name: resolvedProduct.displayBrandName || tCommon("brandName"),
     },
     offers: {
       "@type": "Offer",
@@ -139,7 +149,7 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
       itemCondition: "https://schema.org/NewCondition",
       seller: {
         "@type": "Organization",
-        name: "Mobile Deals Qatar",
+        name: tCommon("storeNameQatar"),
       },
     },
   };
@@ -152,27 +162,27 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
       {
         "@type": "ListItem",
         position: 1,
-        name: "Home",
-        item: "https://mobiledealsqa.com",
+        name: tNav("home"),
+        item: `${baseUrl}/${locale}`,
       },
       {
         "@type": "ListItem",
         position: 2,
-        name: "Shop",
-        item: "https://mobiledealsqa.com/shop",
+        name: tNav("shop"),
+        item: `${baseUrl}/${locale}/shop`,
       },
       ...(product.category
         ? [
             {
               "@type": "ListItem",
               position: 3,
-              name: product.category.name,
-              item: `https://mobiledealsqa.com/categories/${product.category.slug}`,
+              name: resolvedProduct.displayCategoryName,
+              item: `${baseUrl}/${locale}/categories/${product.category.slug}`,
             },
             {
               "@type": "ListItem",
               position: 4,
-              name: product.name,
+              name: resolvedProduct.displayName,
               item: productUrl,
             },
           ]
@@ -180,7 +190,7 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
             {
               "@type": "ListItem",
               position: 3,
-              name: product.name,
+              name: resolvedProduct.displayName,
               item: productUrl,
             },
           ]),
@@ -194,6 +204,13 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
       ([key]) => !INTERNAL_SPEC_KEYS.has(key)
     )
   );
+  const specsAr = product.specifications_ar
+    ? Object.fromEntries(
+        Object.entries(product.specifications_ar as Record<string, string>).filter(
+          ([key]) => !INTERNAL_SPEC_KEYS.has(key)
+        )
+      )
+    : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-white w-full max-w-full overflow-x-hidden">
@@ -207,32 +224,39 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
 
-      <AnnouncementBar items={settings.announcement_bar?.items} />
-      <MainNavbar whatsappNumber={settings.whatsapp_number} />
+      <AnnouncementBar
+        items={settings.announcement_bar?.items}
+        itemsAr={settings.announcement_bar?.items_ar}
+        currency={settings.currency}
+      />
+      <MainNavbar
+        whatsappNumber={settings.whatsapp_number}
+        currency={settings.currency}
+      />
 
       {/* Breadcrumbs */}
       <nav
-        aria-label="Breadcrumb"
+        aria-label={tCommon("breadcrumbAria")}
         className="bg-neutral-50/80 border-b border-neutral-200/80 py-2.5 text-xs text-neutral-500 w-full"
       >
         <div className="max-w-7xl mx-auto px-4 flex items-center gap-1.5 flex-wrap">
           <Link href="/" className="hover:text-[#8A1538] font-medium transition-colors shrink-0">
-            Home
+            {tNav("home")}
           </Link>
-          <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+          <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0 rtl:rotate-180" />
           {product.category && (
             <>
               <Link
                 href={`/categories/${product.category.slug}`}
                 className="hover:text-[#8A1538] font-medium transition-colors shrink-0"
               >
-                {product.category.name}
+                {resolvedProduct.displayCategoryName}
               </Link>
-              <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+              <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0 rtl:rotate-180" />
             </>
           )}
           <span className="text-neutral-900 font-semibold truncate max-w-[140px] sm:max-w-xs">
-            {product.name}
+            {resolvedProduct.displayName}
           </span>
         </div>
       </nav>
@@ -244,7 +268,7 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
           <div className="lg:col-span-5 xl:col-span-5 lg:sticky lg:top-20 w-full min-w-0">
             <ProductGallery
               images={product.product_images}
-              productName={product.name}
+              productName={resolvedProduct.displayName}
             />
           </div>
 
@@ -261,13 +285,20 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
         {/* Product Details & Specifications — Tabbed Layout */}
         <ProductSpecTabs
           description={product.description}
+          descriptionAr={product.description_ar}
           shortDescription={product.short_description}
+          shortDescriptionAr={product.short_description_ar}
           productName={product.name}
+          productNameAr={product.name_ar}
           brandName={product.brand?.name}
+          brandNameAr={product.brand?.name_ar}
           categoryName={product.category?.name}
+          categoryNameAr={product.category?.name_ar}
           warranty={product.warranty}
+          warrantyAr={product.warranty_ar}
           whatsappNumber={settings.whatsapp_number}
           specs={specs}
+          specsAr={specsAr}
         />
       </main>
 

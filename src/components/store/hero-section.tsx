@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Banner } from "@/types/database";
 import { HeroBannerItem } from "./hero-banner-item";
 import {
@@ -17,21 +18,34 @@ interface HeroSectionProps {
   whatsappNumber?: string;
 }
 
+/**
+ * Pure RTL-aware carousel slide track CSS transform helper.
+ * Under dir="rtl", slides flow right-to-left, requiring positive translateX offsets.
+ */
+export function getHeroTrackTransform(currentIdx: number, locale: string): string {
+  const isRtl = locale === "ar";
+  const offset = isRtl ? currentIdx * 100 : -(currentIdx * 100);
+  return `translateX(${offset}%)`;
+}
+
 export function HeroSection({
   banners = [],
   whatsappNumber = "+97455000000",
 }: HeroSectionProps) {
+  const locale = useLocale();
+  const t = useTranslations("home");
+  const isRtl = locale === "ar";
+
   // Fallback banners if database has no active banners yet
   const defaultBanners: Banner[] = [
     {
       id: "default-banner-1",
-      title: "Latest Tech & Smartphone Deals in Qatar",
-      highlighted_text: "Exclusive Qatar Offers",
-      description:
-        "Shop the newest flagships, smartwatches, earbuds and tech accessories with fast doorstep delivery across Qatar.",
-      primary_cta_text: "Shop Deals",
+      title: t("defaultBanner1Title"),
+      highlighted_text: t("defaultBanner1Tag"),
+      description: t("defaultBanner1Desc"),
+      primary_cta_text: t("shopDeals"),
       primary_cta_link: "/#deals",
-      secondary_cta_text: "Order on WhatsApp",
+      secondary_cta_text: t("orderOnWhatsApp"),
       secondary_cta_link: null,
       desktop_image_url:
         "https://images.unsplash.com/photo-1616469829941-c7200edec809?w=1400&auto=format&fit=crop&q=80",
@@ -45,13 +59,12 @@ export function HeroSection({
     },
     {
       id: "default-banner-2",
-      title: "Premium Tech & Fast Delivery",
-      highlighted_text: "Cash on Delivery",
-      description:
-        "Authentic devices, original warranty and instant WhatsApp ordering across all municipalities.",
-      primary_cta_text: "Explore Deals",
+      title: t("defaultBanner2Title"),
+      highlighted_text: t("defaultBanner2Tag"),
+      description: t("defaultBanner2Desc"),
+      primary_cta_text: t("exploreDeals"),
       primary_cta_link: "/#deals",
-      secondary_cta_text: "Order on WhatsApp",
+      secondary_cta_text: t("orderOnWhatsApp"),
       secondary_cta_link: null,
       desktop_image_url:
         "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=1400&auto=format&fit=crop&q=80",
@@ -138,12 +151,14 @@ export function HeroSection({
   };
 
   const handleTouchEnd = () => {
-    if (!touchStartX || !touchEndX) return;
+    if (touchStartX === null || touchEndX === null) return;
     const distance = touchStartX - touchEndX;
     if (distance > 45) {
-      handleNext();
+      if (isRtl) handlePrev();
+      else handleNext();
     } else if (distance < -45) {
-      handlePrev();
+      if (isRtl) handleNext();
+      else handlePrev();
     }
     setTouchStartX(null);
     setTouchEndX(null);
@@ -154,10 +169,10 @@ export function HeroSection({
 
   // Trust items shown under hero (matching referral: 4 in a clean row)
   const trustFeatures = [
-    { icon: Truck, line1: "Fast Delivery", line2: "Qatar" },
-    { icon: Banknote, line1: "Cash on", line2: "Delivery" },
-    { icon: PhoneCall, line1: "WhatsApp", line2: "Support" },
-    { icon: ShieldCheck, line1: "Genuine", line2: "Products" },
+    { icon: Truck, line1: t("trustFastDeliveryLine1"), line2: t("trustFastDeliveryLine2") },
+    { icon: Banknote, line1: t("trustCodLine1"), line2: t("trustCodLine2") },
+    { icon: PhoneCall, line1: t("trustWhatsappLine1"), line2: t("trustWhatsappLine2") },
+    { icon: ShieldCheck, line1: t("trustGenuineLine1"), line2: t("trustGenuineLine2") },
   ];
 
   return (
@@ -176,7 +191,7 @@ export function HeroSection({
             className={`flex w-full ${
               withTransition ? "transition-transform duration-700 ease-in-out" : ""
             }`}
-            style={{ transform: `translateX(-${currentIdx * 100}%)` }}
+            style={{ transform: getHeroTrackTransform(currentIdx, locale) }}
           >
             {slides.map((banner, idx) => (
               <div key={`${banner.id || "b"}-${idx}`} className="w-full shrink-0">
@@ -194,22 +209,22 @@ export function HeroSection({
             <>
               <button
                 onClick={handlePrev}
-                aria-label="Previous Banner"
-                className="hidden sm:flex absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-neutral-950/70 hover:bg-neutral-950 text-white border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
+                aria-label={t("previousBanner")}
+                className="hidden sm:flex absolute start-3 sm:start-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-neutral-950/70 hover:bg-neutral-950 text-white border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
               >
-                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 rtl:rotate-180" />
               </button>
 
               <button
                 onClick={handleNext}
-                aria-label="Next Banner"
-                className="hidden sm:flex absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-neutral-950/70 hover:bg-neutral-950 text-white border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
+                aria-label={t("nextBanner")}
+                className="hidden sm:flex absolute end-3 sm:end-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-neutral-950/70 hover:bg-neutral-950 text-white border border-white/20 transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-2xl active:scale-90"
               >
-                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 rtl:rotate-180" />
               </button>
 
-              {/* Indicator Dots: right-aligned on mobile to not obstruct bottom-left buttons, centered on desktop */}
-              <div className="absolute bottom-3.5 sm:bottom-6 right-3.5 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 bg-neutral-950/70 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/15">
+              {/* Indicator Dots: inline-end-aligned on mobile to not obstruct bottom-start buttons, centered on desktop */}
+              <div className="absolute bottom-3.5 sm:bottom-6 end-3.5 sm:end-auto sm:left-1/2 sm:-translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 bg-neutral-950/70 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/15">
                 {activeBanners.map((_, idx) => (
                   <button
                     key={idx}
@@ -217,7 +232,7 @@ export function HeroSection({
                       setWithTransition(true);
                       setCurrentIdx(idx + 1);
                     }}
-                    aria-label={`Go to slide ${idx + 1}`}
+                    aria-label={t("goToSlide", { index: idx + 1 })}
                     className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer ${
                       activeDotIndex === idx
                         ? "w-5 sm:w-7 bg-[#ff4b77] sm:bg-white shadow-lg"

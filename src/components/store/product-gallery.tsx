@@ -2,8 +2,10 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { useLocale, useTranslations } from "next-intl";
 import { ProductImage } from "@/types/database";
 import { getOptimizedImageUrl } from "@/lib/cloudinary";
+import { resolveProductImages } from "@/lib/i18n/content-resolver";
 
 interface ProductGalleryProps {
   images?: ProductImage[];
@@ -11,9 +13,13 @@ interface ProductGalleryProps {
 }
 
 export function ProductGallery({ images = [], productName }: ProductGalleryProps) {
+  const locale = useLocale();
+  const t = useTranslations("product");
   const [selectedIdx, setSelectedIdx] = useState(0);
 
-  const activeImage = images[selectedIdx]?.image_url || null;
+  const resolvedImages = resolveProductImages(images, locale, productName);
+  const currentImg = resolvedImages[selectedIdx] || null;
+  const activeImage = currentImg?.image_url || null;
 
   return (
     <div className="flex flex-col gap-3 w-full min-w-0 max-w-full">
@@ -22,7 +28,7 @@ export function ProductGallery({ images = [], productName }: ProductGalleryProps
         {activeImage ? (
           <Image
             src={getOptimizedImageUrl(activeImage, "detail")}
-            alt={images[selectedIdx]?.alt_text || productName}
+            alt={currentImg?.displayAltText || productName}
             fill
             priority
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 40vw"
@@ -31,16 +37,16 @@ export function ProductGallery({ images = [], productName }: ProductGalleryProps
         ) : (
           <div className="flex flex-col items-center justify-center text-neutral-300">
             <span className="text-5xl">📱</span>
-            <span className="text-xs text-neutral-400 mt-2 font-medium">No Image Available</span>
+            <span className="text-xs text-neutral-400 mt-2 font-medium">{t("noImageAvailable")}</span>
           </div>
         )}
       </div>
 
       {/* Thumbnails Row — Smooth horizontal swipe on mobile without moving the screen */}
-      {images.length > 1 && (
+      {resolvedImages.length > 1 && (
         <div className="w-full min-w-0 max-w-full overflow-hidden">
           <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 w-full max-w-full scroll-smooth touch-pan-x overscroll-x-contain">
-            {images.map((img, idx) => (
+            {resolvedImages.map((img, idx) => (
               <button
                 key={img.id || idx}
                 type="button"
@@ -53,7 +59,7 @@ export function ProductGallery({ images = [], productName }: ProductGalleryProps
               >
                 <Image
                   src={getOptimizedImageUrl(img.image_url, "thumb")}
-                  alt={img.alt_text || `${productName} thumbnail ${idx + 1}`}
+                  alt={img.displayAltText || t("thumbnailAlt", { product: productName, index: idx + 1 })}
                   fill
                   sizes="64px"
                   className="object-contain p-1"

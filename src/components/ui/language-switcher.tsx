@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useTransition } from "react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { Globe } from "lucide-react";
 
@@ -12,8 +13,10 @@ interface LanguageSwitcherProps {
 
 export function LanguageSwitcher({ className = "", variant = "pill" }: LanguageSwitcherProps) {
   const locale = useLocale();
+  const t = useTranslations("common");
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const handleLocaleChange = (nextLocale: "en" | "ar") => {
@@ -22,11 +25,12 @@ export function LanguageSwitcher({ className = "", variant = "pill" }: LanguageS
     // Persist choice in standard NEXT_LOCALE cookie for 1 year
     document.cookie = `NEXT_LOCALE=${nextLocale}; path=/; max-age=31536000; SameSite=Lax`;
 
-    // Access search params safely from window if in browser, avoiding SSR suspense bailing out
-    let queryString = "";
-    if (typeof window !== "undefined" && window.location.search) {
-      queryString = window.location.search;
-    }
+    const paramString = searchParams?.toString() || "";
+    const queryString = paramString
+      ? `?${paramString}`
+      : typeof window !== "undefined" && window.location.search
+      ? window.location.search
+      : "";
 
     const targetHref = queryString ? `${pathname}${queryString}` : pathname;
 
@@ -38,28 +42,36 @@ export function LanguageSwitcher({ className = "", variant = "pill" }: LanguageS
 
   if (variant === "subtle") {
     return (
-      <div className={`flex items-center gap-1.5 text-xs text-neutral-600 ${className}`}>
+      <div
+        role="group"
+        aria-label={t("languageSelectorAria")}
+        className={`flex items-center gap-1.5 text-xs text-neutral-600 ${className}`}
+      >
         <Globe className="w-3.5 h-3.5 text-neutral-400" />
         <button
           type="button"
           disabled={isPending}
           onClick={() => handleLocaleChange("en")}
+          aria-pressed={locale === "en"}
+          title={t("english")}
           className={`hover:text-[#8A1538] transition-colors cursor-pointer ${
             locale === "en" ? "font-bold text-[#8A1538]" : "text-neutral-500"
           }`}
         >
-          EN
+          {t("enShort")}
         </button>
         <span className="text-neutral-300">|</span>
         <button
           type="button"
           disabled={isPending}
           onClick={() => handleLocaleChange("ar")}
+          aria-pressed={locale === "ar"}
+          title={t("arabic")}
           className={`hover:text-[#8A1538] transition-colors cursor-pointer ${
             locale === "ar" ? "font-bold text-[#8A1538]" : "text-neutral-500"
           }`}
         >
-          عربي
+          {t("arShort")}
         </button>
       </div>
     );
@@ -68,7 +80,7 @@ export function LanguageSwitcher({ className = "", variant = "pill" }: LanguageS
   return (
     <div
       role="group"
-      aria-label="Language selector"
+      aria-label={t("languageSelectorAria")}
       className={`inline-flex items-center rounded-full bg-neutral-100/90 p-0.5 border border-neutral-200/80 text-[11px] sm:text-xs font-semibold select-none shadow-2xs ${className}`}
     >
       <button
@@ -82,7 +94,7 @@ export function LanguageSwitcher({ className = "", variant = "pill" }: LanguageS
             : "text-neutral-600 hover:text-neutral-900"
         } ${isPending ? "opacity-60 cursor-wait" : ""}`}
       >
-        English
+        {t("english")}
       </button>
 
       <button
@@ -96,7 +108,7 @@ export function LanguageSwitcher({ className = "", variant = "pill" }: LanguageS
             : "text-neutral-600 hover:text-neutral-900"
         } ${isPending ? "opacity-60 cursor-wait" : ""}`}
       >
-        العربية
+        {t("arabic")}
       </button>
     </div>
   );
