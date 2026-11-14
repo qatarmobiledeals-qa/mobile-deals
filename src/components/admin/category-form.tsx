@@ -5,7 +5,18 @@ import { useRouter } from "next/navigation";
 import { createCategoryAction, updateCategoryAction } from "@/app/actions/admin";
 import { ImageUploader } from "@/components/admin/image-uploader";
 import { Category } from "@/types/database";
-import { Plus, Edit2, X, Loader2, Layers, CheckCircle2, AlertCircle, Sparkles, Sliders } from "lucide-react";
+import {
+  Plus,
+  Edit2,
+  X,
+  Loader2,
+  Layers,
+  CheckCircle2,
+  AlertCircle,
+  Sliders,
+  Languages,
+  Sparkles,
+} from "lucide-react";
 
 export function CategoryForm({
   category,
@@ -35,9 +46,23 @@ export function CategoryForm({
   const [name, setName] = useState(category?.name || "");
   const [slug, setSlug] = useState(category?.slug || "");
   const [description, setDescription] = useState(category?.description || "");
+  const [nameAr, setNameAr] = useState(category?.name_ar || "");
+  const [descriptionAr, setDescriptionAr] = useState(category?.description_ar || "");
   const [imageUrl, setImageUrl] = useState(category?.image_url || "");
   const [displayOrder, setDisplayOrder] = useState(String(category?.display_order ?? 0));
   const [isActive, setIsActive] = useState(category?.is_active ?? true);
+
+  const openModal = () => {
+    setName(category?.name || "");
+    setSlug(category?.slug || "");
+    setDescription(category?.description || "");
+    setNameAr(category?.name_ar || "");
+    setDescriptionAr(category?.description_ar || "");
+    setImageUrl(category?.image_url || "");
+    setDisplayOrder(String(category?.display_order ?? 0));
+    setIsActive(category?.is_active ?? true);
+    setIsOpen(true);
+  };
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -65,8 +90,10 @@ export function CategoryForm({
       if (isEditing && category?.id) {
         res = await updateCategoryAction(category.id, {
           name,
+          name_ar: nameAr.trim() || undefined,
           slug,
           description: description || undefined,
+          description_ar: descriptionAr.trim() || undefined,
           image_url: imageUrl || undefined,
           display_order: parseInt(displayOrder) || 0,
           is_active: isActive,
@@ -74,8 +101,10 @@ export function CategoryForm({
       } else {
         res = await createCategoryAction({
           name,
+          name_ar: nameAr.trim() || undefined,
           slug,
           description: description || undefined,
+          description_ar: descriptionAr.trim() || undefined,
           image_url: imageUrl || undefined,
           display_order: parseInt(displayOrder) || 0,
           is_active: isActive,
@@ -98,13 +127,13 @@ export function CategoryForm({
   return (
     <>
       {trigger ? (
-        <div onClick={() => setIsOpen(true)} className="cursor-pointer">
+        <div onClick={openModal} className="cursor-pointer">
           {trigger}
         </div>
       ) : (
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={openModal}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#8A1538] hover:bg-[#6c102c] text-white text-xs font-bold rounded-xl shadow-md transition-all hover:scale-102 active:scale-98 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -229,6 +258,51 @@ export function CategoryForm({
                       <p className="text-[11px] text-neutral-500">
                         Shown on category landing banners and search result summaries.
                       </p>
+                    </div>
+                  </div>
+
+                  {/* ARABIC LOCALIZATION CARD */}
+                  <div className="p-5 sm:p-6 rounded-2xl bg-neutral-950/70 border border-neutral-800 space-y-4">
+                    <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Languages className="w-4 h-4 text-[#ff4b77]" />
+                        <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-200">
+                          Arabic Localization (الترجمة العربية)
+                        </h3>
+                      </div>
+                      <span className="text-[11px] text-neutral-500 font-normal">Manual translation</span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Category Name (اسم القسم بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="rtl"
+                          value={nameAr}
+                          onChange={(e) => setNameAr(e.target.value)}
+                          placeholder="مثال: الهواتف الذكية والأجهزة اللوحية"
+                          className="w-full h-11 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm text-right"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="font-semibold text-neutral-300 flex items-center justify-between text-xs">
+                          <span>Arabic Description (الوصف بالعربية)</span>
+                          <span className="text-[10px] text-neutral-500 font-mono">RTL</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          dir="rtl"
+                          value={descriptionAr}
+                          onChange={(e) => setDescriptionAr(e.target.value)}
+                          placeholder="نبذة تعريفية وترويجية باللغة العربية للقسم..."
+                          className="w-full p-4 rounded-xl bg-neutral-900 border border-neutral-800 text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#8A1538] focus:ring-1 focus:ring-[#8A1538] text-xs sm:text-sm resize-y text-right"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>

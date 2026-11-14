@@ -17,6 +17,9 @@ export interface Category {
   icon_name: string | null;
   display_order: number;
   is_active: boolean;
+  is_arabic_reviewed?: boolean;
+  arabic_updated_at?: string | null;
+  translation_metadata?: TranslationMetadata | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +27,7 @@ export interface Category {
 export interface Brand {
   id: string;
   name: string;
+  name_ar?: string | null;
   slug: string;
   logo_url: string | null;
   is_active: boolean;
@@ -56,7 +60,7 @@ export interface ProductImage {
 }
 
 export interface TranslationFieldMetadata {
-  source?: "manual" | "ai";
+  source?: "manual";
   reviewed?: boolean;
   updated_at?: string;
   [key: string]: unknown;
@@ -126,6 +130,9 @@ export interface Banner {
   position: string;
   display_order: number;
   is_active: boolean;
+  is_arabic_reviewed?: boolean;
+  arabic_updated_at?: string | null;
+  translation_metadata?: TranslationMetadata | null;
   created_at: string;
   updated_at: string;
 }
@@ -171,7 +178,6 @@ export interface SiteSettings {
   support_phone: string;
   store_email: string;
   currency: string;
-  currency_ar?: string | null;
   shipping_charge?: number;
   free_delivery_threshold?: number;
   announcement_bar?: {

@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
-import Link from "next/link";
+import React, { useRef, useState, useEffect, useCallback } from "react";
+import { Link } from "@/i18n/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Category } from "@/types/database";
+import { resolveCategoryContent } from "@/lib/i18n/content-resolver";
 import {
   Menu,
   Smartphone,
@@ -10,11 +12,9 @@ import {
   Headphones,
   Zap,
   Watch,
-  Sparkles,
   ShieldCheck,
   BatteryCharging,
   Gamepad2,
-  Package,
   Tablet,
   Cable,
   MonitorSmartphone,
@@ -27,7 +27,6 @@ import {
   ShoppingBag,
   ChevronLeft,
   ChevronRight,
-  LayoutGrid,
 } from "lucide-react";
 
 // Custom elegant Perfume Bottle icon matching Lucide style
@@ -251,23 +250,34 @@ const getCategoryMeta = (
 };
 
 export function CategoryNav({ categories = [] }: CategoryNavProps) {
+  const locale = useLocale();
+  const isRtl = locale === "ar";
+  const t = useTranslations("nav");
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  const checkScroll = () => {
+  const checkScroll = useCallback(() => {
     if (scrollContainerRef.current) {
       const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
-      setCanScrollLeft(scrollLeft > 6);
-      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 6);
+      const maxScroll = Math.max(0, scrollWidth - clientWidth);
+      if (isRtl) {
+        const absLeft = Math.abs(scrollLeft);
+        setCanScrollLeft(absLeft < maxScroll - 6);
+        setCanScrollRight(absLeft > 6);
+      } else {
+        setCanScrollLeft(scrollLeft > 6);
+        setCanScrollRight(scrollLeft < maxScroll - 6);
+      }
     }
-  };
+  }, [isRtl]);
 
   useEffect(() => {
     checkScroll();
     window.addEventListener("resize", checkScroll);
     return () => window.removeEventListener("resize", checkScroll);
-  }, [categories]);
+  }, [categories, checkScroll]);
 
   const handleScroll = (direction: "left" | "right") => {
     if (scrollContainerRef.current) {
@@ -279,28 +289,28 @@ export function CategoryNav({ categories = [] }: CategoryNavProps) {
 
   return (
     <nav
-      aria-label="Category Navigation"
+      aria-label={t("categoryNavAria")}
       className="hidden md:block bg-white border-b border-neutral-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.03)] relative z-20"
     >
       <div className="max-w-7xl mx-auto px-4 flex items-center gap-1.5 py-1.5">
         {/* CATEGORIES trigger — Maroon Menu Icon + Bold Black Text */}
         <Link
           href="/#categories"
-          className="group flex items-center gap-2 py-1.5 pr-4 pl-1 text-neutral-900 hover:text-[#8A1538] shrink-0 transition-colors border-r border-neutral-200 mr-1.5"
+          className="group flex items-center gap-2 py-1.5 pe-4 ps-1 text-neutral-900 hover:text-[#8A1538] shrink-0 transition-colors border-e border-neutral-200 me-1.5"
         >
           <Menu className="w-4 h-4 text-[#8A1538] stroke-[2.5] group-hover:scale-105 transition-transform" />
           <span className="uppercase tracking-wider text-[12px] font-black text-neutral-900 group-hover:text-[#8A1538] transition-colors">
-            CATEGORIES
+            {t("categories")}
           </span>
         </Link>
 
         {/* Scroll Container with Fade Edges & Arrows */}
         <div className="relative flex-1 flex items-center overflow-hidden">
-          {/* Left scroll arrow */}
+          {/* Physical Left scroll arrow */}
           {canScrollLeft && (
             <button
               onClick={() => handleScroll("left")}
-              aria-label="Scroll left"
+              aria-label={t("scrollLeft")}
               className="absolute left-0 z-10 p-1 rounded-full bg-white/95 backdrop-blur-xs border border-neutral-200 text-neutral-600 hover:text-[#8A1538] hover:bg-neutral-50 shadow-sm transition-all -ml-1 cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -316,10 +326,11 @@ export function CategoryNav({ categories = [] }: CategoryNavProps) {
           >
             {categories.length === 0 ? (
               <span className="text-neutral-400 italic text-[11px] py-1">
-                Categories managed via Admin
+                {t("categoriesManagedViaAdmin")}
               </span>
             ) : (
               categories.map((cat) => {
+                const resolvedCat = resolveCategoryContent(cat, locale);
                 const { Icon, iconColor, badgeBg, badgeBorder } = getCategoryMeta(
                   cat.slug,
                   cat.name,
@@ -344,7 +355,7 @@ export function CategoryNav({ categories = [] }: CategoryNavProps) {
 
                     {/* Category Label */}
                     <span className="text-[12px] font-semibold text-neutral-700 group-hover:text-neutral-950 transition-colors">
-                      {cat.name}
+                      {resolvedCat.displayName}
                     </span>
                   </Link>
                 );
@@ -352,11 +363,11 @@ export function CategoryNav({ categories = [] }: CategoryNavProps) {
             )}
           </div>
 
-          {/* Right scroll arrow */}
+          {/* Physical Right scroll arrow */}
           {canScrollRight && (
             <button
               onClick={() => handleScroll("right")}
-              aria-label="Scroll right"
+              aria-label={t("scrollRight")}
               className="absolute right-0 z-10 p-1 rounded-full bg-white/95 backdrop-blur-xs border border-neutral-200 text-neutral-600 hover:text-[#8A1538] hover:bg-neutral-50 shadow-sm transition-all -mr-1 cursor-pointer"
             >
               <ChevronRight className="w-3.5 h-3.5" />

@@ -1,13 +1,18 @@
+"use client";
+
 import React from "react";
+import { useTranslations } from "next-intl";
 import { Trophy, Truck, ThumbsUp, Headset, ShieldCheck } from "lucide-react";
 
 export function TrustBar() {
+  const t = useTranslations("trust");
+
   const items = [
-    { icon: Trophy, title: "Top Brands", subtitle: "100% genuine products" },
-    { icon: Truck, title: "Qatar Wide Delivery", subtitle: "Fast doorstep service" },
-    { icon: ThumbsUp, title: "Best Prices", subtitle: "Unbeatable deals" },
-    { icon: Headset, title: "Dedicated Support", subtitle: "Direct WhatsApp care" },
-    { icon: ShieldCheck, title: "Secure Ordering", subtitle: "Cash on delivery safe" },
+    { icon: Trophy, title: t("topBrandsTitle"), subtitle: t("topBrandsSub") },
+    { icon: Truck, title: t("deliveryTitle"), subtitle: t("deliverySub") },
+    { icon: ThumbsUp, title: t("bestPricesTitle"), subtitle: t("bestPricesSub") },
+    { icon: Headset, title: t("supportTitle"), subtitle: t("supportSub") },
+    { icon: ShieldCheck, title: t("secureTitle"), subtitle: t("secureSub") },
   ];
 
   return (
@@ -31,7 +36,7 @@ export function TrustBar() {
                 </div>
 
                 {/* Text Details */}
-                <div className="text-left min-w-0 flex-1">
+                <div className="text-start min-w-0 flex-1">
                   <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight leading-snug truncate">
                     {item.title}
                   </h4>

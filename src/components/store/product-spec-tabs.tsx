@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import {
   FileText,
   TableProperties,
@@ -9,16 +10,24 @@ import {
   CheckCircle2,
   ExternalLink,
 } from "lucide-react";
+import { resolveProductSpecifications, resolveTextField } from "@/lib/i18n/content-resolver";
 
 interface ProductSpecTabsProps {
   description?: string | null;
+  descriptionAr?: string | null;
   shortDescription?: string | null;
+  shortDescriptionAr?: string | null;
   productName: string;
+  productNameAr?: string | null;
   brandName?: string | null;
+  brandNameAr?: string | null;
   categoryName?: string | null;
+  categoryNameAr?: string | null;
   warranty?: string | null;
+  warrantyAr?: string | null;
   whatsappNumber?: string;
   specs: Record<string, string>;
+  specsAr?: Record<string, string> | null;
 }
 
 // Known tech acronyms and proper casing
@@ -120,7 +129,11 @@ export function formatSpecKey(rawKey: string): string {
     .join(" ");
 }
 
-export function formatSpecValue(val: any): string {
+export function formatSpecValue(
+  val: unknown,
+  supportedLabel: string = "Supported",
+  notSupportedLabel: string = "Not Supported"
+): string {
   if (val === null || val === undefined || val === "") return "—";
   const str = String(val).trim();
   const lower = str.toLowerCase();
@@ -136,8 +149,8 @@ export function formatSpecValue(val: any): string {
   if (lower === "s30+" || lower === "series 30+") return "Series 30+";
   if (lower === "type-c" || lower === "type c" || lower === "usb-c") return "USB Type-C";
   if (lower === "nano sim" || lower === "nano-sim") return "Nano SIM";
-  if (lower === "yes" || lower === "true") return "Supported";
-  if (lower === "no" || lower === "false") return "Not Supported";
+  if (lower === "yes" || lower === "true") return supportedLabel;
+  if (lower === "no" || lower === "false") return notSupportedLabel;
 
   // Capitalize single lowercase word (e.g. "demo" -> "Demo")
   if (/^[a-z]+$/.test(str)) {
@@ -175,65 +188,140 @@ function parseSpecsFromText(text?: string | null): Record<string, string> {
 
 export function ProductSpecTabs({
   description,
+  descriptionAr,
   shortDescription,
+  shortDescriptionAr,
   productName,
+  productNameAr,
   brandName,
+  brandNameAr,
   categoryName,
+  categoryNameAr,
   warranty,
+  warrantyAr,
   whatsappNumber = "+97455000000",
   specs,
+  specsAr,
 }: ProductSpecTabsProps) {
-  // Compile full ordered spec list
+  const locale = useLocale();
+  const tProduct = useTranslations("product");
+
+  const resolvedProductName =
+    resolveTextField(productName, productNameAr, locale).value || productName;
+  const resolvedBrandName = resolveTextField(brandName, brandNameAr, locale, {
+    optional: true,
+  }).resolvedValue;
+  const resolvedCategoryName = resolveTextField(categoryName, categoryNameAr, locale, {
+    optional: true,
+  }).resolvedValue;
+  const resolvedDescription = resolveTextField(description, descriptionAr, locale, {
+    optional: true,
+  }).resolvedValue;
+  const resolvedShortDescription = resolveTextField(shortDescription, shortDescriptionAr, locale, {
+    optional: true,
+  }).resolvedValue;
+  const resolvedWarranty = resolveTextField(warranty, warrantyAr, locale, {
+    optional: true,
+  }).resolvedValue;
+
+  // Compile full ordered & localized spec list
   const fullSpecEntries = useMemo(() => {
     const rawEntries = Object.entries(specs || {});
-    // If no custom specs in JSON, parse from description text if available
-    const parsedFromDesc = rawEntries.length === 0 ? parseSpecsFromText(description) : {};
-    const mergedEntries = rawEntries.length > 0 ? rawEntries : Object.entries(parsedFromDesc);
+    const hasCustomArSpecs = specsAr && Object.keys(specsAr).length > 0;
+    const parsedFromDesc =
+      rawEntries.length === 0 && !hasCustomArSpecs
+        ? parseSpecsFromText(resolvedDescription || description)
+        : {};
+    const mergedEnSource = rawEntries.length > 0 ? specs || {} : parsedFromDesc;
 
-    const existingKeys = new Set(mergedEntries.map(([k]) => k.trim().toLowerCase()));
+    const existingKeys = new Set(
+      [...Object.keys(mergedEnSource), ...Object.keys(specsAr || {})].map((k) =>
+        k.trim().toLowerCase().replace(/[\s-]+/g, "_")
+      )
+    );
 
-    const result: Array<[string, string]> = [];
+    const enSpecsMap: Record<string, string> = {};
+    const arSpecsMap: Record<string, string> = {};
 
-    // Prepend Product Name if not already in specs
-    if (
-      !existingKeys.has("product name") &&
-      !existingKeys.has("product_name") &&
-      !existingKeys.has("name") &&
-      productName
-    ) {
-      result.push(["Product Name", productName]);
-    }
-
-    // Prepend Brand if not already in specs
-    if (!existingKeys.has("brand") && brandName) {
-      result.push(["Brand", brandName]);
-    }
-
-    // Prepend Category if not already in specs
-    if (!existingKeys.has("category") && categoryName) {
-      result.push(["Category", categoryName]);
-    }
-
-    // Add user-defined specs or parsed specs
-    for (const [k, v] of mergedEntries) {
-      if (v !== undefined && v !== null && String(v).trim() !== "") {
-        result.push([k, String(v)]);
+    if (!existingKeys.has("product_name") && !existingKeys.has("name") && resolvedProductName) {
+      enSpecsMap["product_name"] = productName;
+      if (productNameAr?.trim() || productName !== resolvedProductName) {
+        arSpecsMap["product_name"] = productNameAr?.trim() || resolvedProductName;
       }
     }
 
-    // Append Warranty if not already in specs
-    if (!existingKeys.has("warranty") && warranty) {
-      result.push(["Warranty", warranty]);
+    if (!existingKeys.has("brand") && resolvedBrandName) {
+      enSpecsMap["brand"] = brandName || resolvedBrandName;
+      if (brandNameAr?.trim() || brandName !== resolvedBrandName) {
+        arSpecsMap["brand"] = brandNameAr?.trim() || resolvedBrandName;
+      }
     }
 
-    return result;
-  }, [specs, description, productName, brandName, categoryName, warranty]);
+    if (!existingKeys.has("category") && resolvedCategoryName) {
+      enSpecsMap["category"] = categoryName || resolvedCategoryName;
+      if (categoryNameAr?.trim() || categoryName !== resolvedCategoryName) {
+        arSpecsMap["category"] = categoryNameAr?.trim() || resolvedCategoryName;
+      }
+    }
+
+    for (const [k, v] of Object.entries(mergedEnSource)) {
+      if (v !== undefined && v !== null && String(v).trim() !== "") {
+        enSpecsMap[k] = String(v);
+      }
+    }
+
+    if (specsAr && typeof specsAr === "object") {
+      for (const [k, v] of Object.entries(specsAr)) {
+        if (v !== undefined && v !== null && String(v).trim() !== "") {
+          arSpecsMap[k] = String(v);
+        }
+      }
+    }
+
+    if (!existingKeys.has("warranty") && resolvedWarranty) {
+      enSpecsMap["warranty"] = warranty || resolvedWarranty;
+      if (warrantyAr?.trim() || warranty !== resolvedWarranty) {
+        arSpecsMap["warranty"] = warrantyAr?.trim() || resolvedWarranty;
+      }
+    }
+
+    const resolvedItems = resolveProductSpecifications(enSpecsMap, arSpecsMap, locale);
+
+    return resolvedItems.map((item) => ({
+      key: item.key,
+      label:
+        locale === "ar" && item.keyAvailability === "localized"
+          ? item.label
+          : formatSpecKey(item.key),
+      value: formatSpecValue(item.value, tProduct("supported"), tProduct("notSupported")),
+    }));
+  }, [
+    specs,
+    specsAr,
+    description,
+    resolvedDescription,
+    productName,
+    productNameAr,
+    resolvedProductName,
+    brandName,
+    brandNameAr,
+    resolvedBrandName,
+    categoryName,
+    categoryNameAr,
+    resolvedCategoryName,
+    warranty,
+    warrantyAr,
+    resolvedWarranty,
+    locale,
+    tProduct,
+  ]);
 
   // Clean overview text (filter out raw spec key-values if description was used)
   const overviewText = useMemo(() => {
-    if (shortDescription?.trim()) return shortDescription.trim();
-    if (!description?.trim()) return "";
-    const lines = description.split("\n");
+    if (resolvedShortDescription?.trim()) return resolvedShortDescription.trim();
+    const rawDesc = resolvedDescription || description;
+    if (!rawDesc?.trim()) return "";
+    const lines = rawDesc.split("\n");
     const proseLines = lines.filter((l) => {
       const trimmed = l.trim();
       if (!trimmed) return false;
@@ -246,7 +334,7 @@ export function ProductSpecTabs({
       return true;
     });
     return proseLines.join("\n\n").trim();
-  }, [description, shortDescription]);
+  }, [resolvedShortDescription, resolvedDescription, description]);
 
   const hasSpecs = fullSpecEntries.length > 0;
   const [activeTab, setActiveTab] = useState<"overview" | "specs">(
@@ -269,10 +357,10 @@ export function ProductSpecTabs({
             }`}
           >
             <TableProperties className="w-4 h-4 text-[#8A1538]" />
-            <span>Technical Specifications</span>
+            <span>{tProduct("specifications")}</span>
             {hasSpecs && (
               <span
-                className={`ml-0.5 px-2 py-0.5 text-[11px] font-extrabold rounded-full transition-colors ${
+                className={`ms-0.5 px-2 py-0.5 text-[11px] font-extrabold rounded-full transition-colors ${
                   activeTab === "specs"
                     ? "bg-[#8A1538] text-white"
                     : "bg-neutral-200/80 text-neutral-600"
@@ -294,7 +382,7 @@ export function ProductSpecTabs({
             }`}
           >
             <FileText className="w-4 h-4 text-[#8A1538]" />
-            <span>Product Overview</span>
+            <span>{tProduct("productOverview")}</span>
           </button>
         </div>
       </div>
@@ -306,38 +394,38 @@ export function ProductSpecTabs({
           <div className="w-full">
             {hasSpecs ? (
               <div className="rounded-2xl border border-neutral-200/90 bg-white shadow-xs overflow-hidden w-full max-w-4xl">
-                {/* Table Header Row (matches reference image) */}
+                {/* Table Header Row */}
                 <div className="grid grid-cols-12 bg-[#F8F9FA] border-b border-neutral-200/90 px-5 sm:px-8 py-3.5 items-center">
                   <div className="col-span-5 sm:col-span-4">
                     <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500">
-                      Specification
+                      {tProduct("specification")}
                     </span>
                   </div>
                   <div className="col-span-7 sm:col-span-8">
                     <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500">
-                      Detail
+                      {tProduct("detail")}
                     </span>
                   </div>
                 </div>
 
-                {/* Table Body Rows (pure crisp white background, clear dividers) */}
+                {/* Table Body Rows */}
                 <div className="divide-y divide-neutral-100">
-                  {fullSpecEntries.map(([key, val]) => (
+                  {fullSpecEntries.map((item) => (
                     <div
-                      key={key}
+                      key={item.key}
                       className="grid grid-cols-12 px-5 sm:px-8 py-3.5 sm:py-4 items-center bg-white hover:bg-neutral-50/70 transition-colors duration-150"
                     >
                       {/* Specification Column */}
-                      <div className="col-span-5 sm:col-span-4 pr-3 sm:pr-6">
+                      <div className="col-span-5 sm:col-span-4 pe-3 sm:pe-6">
                         <span className="text-xs sm:text-[14px] font-medium text-neutral-600 leading-snug block">
-                          {formatSpecKey(key)}
+                          {item.label}
                         </span>
                       </div>
 
                       {/* Detail Column */}
                       <div className="col-span-7 sm:col-span-8">
                         <span className="text-xs sm:text-[14px] font-semibold text-neutral-900 leading-snug break-words block">
-                          {formatSpecValue(val)}
+                          {item.value}
                         </span>
                       </div>
                     </div>
@@ -349,21 +437,21 @@ export function ProductSpecTabs({
               <div className="max-w-4xl p-8 rounded-2xl bg-neutral-50 border border-dashed border-neutral-200 text-center">
                 <TableProperties className="w-10 h-10 mx-auto text-neutral-300 mb-2" />
                 <p className="text-sm font-semibold text-neutral-700">
-                  No technical specifications listed for this product yet.
+                  {tProduct("noSpecsListed")}
                 </p>
                 <p className="text-xs text-neutral-500 mt-1">
-                  Have a specific question about features or compatibility?
+                  {tProduct("haveSpecificQuestion")}
                 </p>
                 <a
                   href={`https://wa.me/${whatsappNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                    `Hi, I have a question about the specifications for ${productName}`
+                    tProduct("specsQuestionWhatsappMessage", { product: resolvedProductName })
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
                 >
-                  <span>Ask on WhatsApp</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>{tProduct("askOnWhatsApp")}</span>
+                  <ExternalLink className="w-3.5 h-3.5 rtl:scale-x-[-1]" />
                 </a>
               </div>
             )}
@@ -378,8 +466,7 @@ export function ProductSpecTabs({
                 <p className="whitespace-pre-line leading-relaxed">{overviewText}</p>
               ) : (
                 <p className="text-neutral-500 italic">
-                  Genuine {productName} available with fast doorstep delivery across Qatar.
-                  Backed by our 100% authenticity guarantee and Cash on Delivery option.
+                  {tProduct("defaultOverviewFallback", { product: resolvedProductName })}
                 </p>
               )}
             </div>
@@ -389,22 +476,22 @@ export function ProductSpecTabs({
               <div className="flex items-center gap-3 p-3.5 rounded-xl bg-neutral-50/80 border border-neutral-100">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                 <div>
-                  <h4 className="text-xs font-bold text-neutral-900">100% Genuine</h4>
-                  <p className="text-[11px] text-neutral-500">Direct from authorized distributor</p>
+                  <h4 className="text-xs font-bold text-neutral-900">{tProduct("genuine100")}</h4>
+                  <p className="text-[11px] text-neutral-500">{tProduct("authorizedDistributor")}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3.5 rounded-xl bg-neutral-50/80 border border-neutral-100">
                 <Truck className="w-5 h-5 text-[#8A1538] shrink-0" />
                 <div>
-                  <h4 className="text-xs font-bold text-neutral-900">Express Delivery</h4>
-                  <p className="text-[11px] text-neutral-500">Fast delivery across all Qatar</p>
+                  <h4 className="text-xs font-bold text-neutral-900">{tProduct("expressDelivery")}</h4>
+                  <p className="text-[11px] text-neutral-500">{tProduct("expressDeliverySub")}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3.5 rounded-xl bg-neutral-50/80 border border-neutral-100">
                 <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />
                 <div>
-                  <h4 className="text-xs font-bold text-neutral-900">Official Warranty</h4>
-                  <p className="text-[11px] text-neutral-500">{warranty || "Comprehensive coverage"}</p>
+                  <h4 className="text-xs font-bold text-neutral-900">{tProduct("officialWarranty")}</h4>
+                  <p className="text-[11px] text-neutral-500">{resolvedWarranty || tProduct("comprehensiveCoverage")}</p>
                 </div>
               </div>
             </div>
