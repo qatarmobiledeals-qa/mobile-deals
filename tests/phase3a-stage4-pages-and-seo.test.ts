@@ -736,9 +736,9 @@ describe("Stage 4: Server Pages Contract & Phase 3B Quarantine", () => {
     }
   });
 
-  it("Phase 3B checkout/cart/order/whatsapp files remain completely unlocalized/quarantined", () => {
+  it("Phase 3B checkout/cart/order/whatsapp files are localized with next-intl and @/i18n/navigation", () => {
     const whatsappSrc = fs.readFileSync(path.join(PROJECT_ROOT, "src/lib/whatsapp.ts"), "utf8");
-    assert.doesNotMatch(whatsappSrc, /next-intl/, "whatsapp.ts must remain untouched in Phase 3A");
+    assert.match(whatsappSrc, /locale\s*=\s*"en"/, "whatsapp.ts must support locale parameter");
 
     for (const phase3bPath of [
       "src/app/(storefront)/[locale]/cart/page.tsx",
@@ -746,7 +746,8 @@ describe("Stage 4: Server Pages Contract & Phase 3B Quarantine", () => {
       "src/app/(storefront)/[locale]/order-success/[ref]/page.tsx",
     ]) {
       const src = fs.readFileSync(path.join(PROJECT_ROOT, phase3bPath), "utf8");
-      assert.doesNotMatch(src, /useTranslations|getTranslations/, `${phase3bPath} must stay quarantined in Phase 3A`);
+      assert.match(src, /useTranslations|getTranslations/, `${phase3bPath} must use next-intl translations`);
+      assert.doesNotMatch(src, /from\s+["']next\/link["']/, `${phase3bPath} must not import next/link`);
     }
   });
 });

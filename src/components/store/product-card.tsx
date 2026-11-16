@@ -72,7 +72,8 @@ export function ProductCard({ product, currency = "QAR", priority = false }: Pro
     e.stopPropagation();
     addItem({
       productId: product.id,
-      productName: resolved.displayName,
+      productName: product.name,
+      productNameAr: product.name_ar ?? null,
       productSlug: product.slug,
       price: product.price,
       imageUrl: optimizedImgUrl,

@@ -1,12 +1,16 @@
 "use client";
 
 import React, { Suspense, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useCart } from "@/hooks/use-cart";
 import { CartItem } from "@/types/database";
 import { createCodOrder } from "@/app/actions/order";
+import { resolveTextField } from "@/lib/i18n/content-resolver";
+import { formatPrice } from "@/lib/formatters";
 import { Logo } from "@/components/ui/logo";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
 import {
   ShieldCheck,
   Truck,
@@ -21,37 +25,66 @@ import {
   Zap,
 } from "lucide-react";
 
-const POPULAR_QATAR_AREAS = [
-  "Doha - Al Sadd",
-  "Doha - West Bay",
-  "Doha - The Pearl Qatar",
-  "Lusail City",
-  "Doha - Al Dafna",
-  "Al Rayyan",
-  "Al Wakrah",
-  "Al Khor",
-  "Doha - Al Mansoura",
-  "Doha - Al Hilal",
-  "Doha - Madinat Khalifa",
-  "Doha - Abu Hamour",
-  "Doha - Al Waab",
-  "Doha - Bin Mahmoud",
-  "Umm Salal",
-  "Al Shahaniya",
-];
+const QATAR_AREA_OPTIONS = [
+  { value: "Doha - Al Sadd", key: "dohaAlSadd" },
+  { value: "Doha - West Bay", key: "dohaWestBay" },
+  { value: "Doha - The Pearl Qatar", key: "dohaThePearl" },
+  { value: "Lusail City", key: "lusailCity" },
+  { value: "Doha - Al Dafna", key: "dohaAlDafna" },
+  { value: "Al Rayyan", key: "alRayyan" },
+  { value: "Al Wakrah", key: "alWakrah" },
+  { value: "Al Khor", key: "alKhor" },
+  { value: "Doha - Al Mansoura", key: "dohaAlMansoura" },
+  { value: "Doha - Al Hilal", key: "dohaAlHilal" },
+  { value: "Doha - Madinat Khalifa", key: "dohaMadinatKhalifa" },
+  { value: "Doha - Abu Hamour", key: "dohaAbuHamour" },
+  { value: "Doha - Al Waab", key: "dohaAlWaab" },
+  { value: "Doha - Bin Mahmoud", key: "dohaBinMahmoud" },
+  { value: "Umm Salal", key: "ummSalal" },
+  { value: "Al Shahaniya", key: "alShahaniya" },
+] as const;
+
+const CHECKOUT_DRAFT_KEY = "mobile_deals_checkout_draft_v1";
+
+interface CheckoutFormData {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  area: string;
+  zone: string;
+  street: string;
+  building: string;
+  deliveryNotes: string;
+}
+
+const DEFAULT_FORM_DATA: CheckoutFormData = {
+  customerName: "",
+  customerPhone: "",
+  customerEmail: "",
+  area: QATAR_AREA_OPTIONS[0].value,
+  zone: "",
+  street: "",
+  building: "",
+  deliveryNotes: "",
+};
 
 function CheckoutContent() {
   const router = useRouter();
+  const locale = useLocale();
+  const tCheckout = useTranslations("checkout");
   const searchParams = useSearchParams();
   const isDirect = searchParams.get("direct") === "1";
 
-  const { items: cartItems, deliveryFee, isHydrated } = useCart();
+  const { items: cartItems, deliveryFee, currency, isHydrated } = useCart();
   const [directItems, setDirectItems] = useState<CartItem[]>([]);
   const [directLoaded, setDirectLoaded] = useState(!isDirect);
 
   // Load direct single-item buy payload from sessionStorage
   useEffect(() => {
-    if (isDirect) {
+    if (!isDirect) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
       try {
         const stored = sessionStorage.getItem("direct_checkout_item");
         if (stored) {
@@ -65,7 +98,10 @@ function CheckoutContent() {
       } finally {
         setDirectLoaded(true);
       }
-    }
+    });
+    return () => {
+      active = false;
+    };
   }, [isDirect]);
 
   // Determine active items for this checkout session
@@ -78,16 +114,39 @@ function CheckoutContent() {
   );
   const total = subtotal + deliveryFee;
 
-  const [formData, setFormData] = useState({
-    customerName: "",
-    customerPhone: "",
-    customerEmail: "",
-    area: POPULAR_QATAR_AREAS[0],
-    zone: "",
-    street: "",
-    building: "",
-    deliveryNotes: "",
-  });
+  const [formData, setFormData] = useState<CheckoutFormData>(DEFAULT_FORM_DATA);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  // Restore checkout form draft so locale switching never loses typed details
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const saved = sessionStorage.getItem(CHECKOUT_DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as Partial<CheckoutFormData>;
+          setFormData((prev) => ({ ...prev, ...parsed }));
+        }
+      } catch {
+        // ignore storage errors
+      } finally {
+        setDraftHydrated(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    try {
+      sessionStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(formData));
+    } catch {
+      // ignore storage errors
+    }
+  }, [formData, draftHydrated]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -95,49 +154,58 @@ function CheckoutContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting || isSuccess) return;
     setErrorMessage(null);
 
     if (activeItems.length === 0) {
       setErrorMessage(
-        isDirect
-          ? "No product selected for direct checkout."
-          : "Your cart is empty. Please add products first."
+        isDirect ? tCheckout("errors.noDirectProduct") : tCheckout("errors.emptyCart")
       );
       return;
     }
 
     if (!formData.customerName.trim()) {
-      setErrorMessage("Please enter your full name.");
+      setErrorMessage(tCheckout("errors.nameRequired"));
       return;
     }
 
-    if (!formData.customerPhone.trim()) {
-      setErrorMessage("Please enter your mobile phone number.");
+    const phoneDigits = formData.customerPhone.replace(/\D/g, "");
+    if (!phoneDigits) {
+      setErrorMessage(tCheckout("errors.phoneRequired"));
+      return;
+    }
+    if (phoneDigits.length < 8) {
+      setErrorMessage(tCheckout("errors.invalidPhone"));
       return;
     }
 
-    if (!formData.customerEmail.trim()) {
-      setErrorMessage("Please enter your email address for order confirmation.");
+    const trimmedEmail = formData.customerEmail.trim();
+    if (!trimmedEmail) {
+      setErrorMessage(tCheckout("errors.emailRequired"));
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setErrorMessage(tCheckout("errors.invalidEmail"));
       return;
     }
 
     if (!formData.area.trim()) {
-      setErrorMessage("Please select your municipality/area.");
+      setErrorMessage(tCheckout("errors.areaRequired"));
       return;
     }
 
     if (!formData.zone.trim()) {
-      setErrorMessage("Please enter your Zone number.");
+      setErrorMessage(tCheckout("errors.zoneRequired"));
       return;
     }
 
     if (!formData.street.trim()) {
-      setErrorMessage("Please enter your Street or Road name.");
+      setErrorMessage(tCheckout("errors.streetRequired"));
       return;
     }
 
     if (!formData.building.trim()) {
-      setErrorMessage("Please enter your Building or Villa number.");
+      setErrorMessage(tCheckout("errors.buildingRequired"));
       return;
     }
 
@@ -146,34 +214,37 @@ function CheckoutContent() {
     try {
       const result = await createCodOrder({
         customerName: formData.customerName.trim(),
-        customerPhone: formData.customerPhone.trim(),
-        customerEmail: formData.customerEmail.trim() || undefined,
+        customerPhone: phoneDigits,
+        customerEmail: trimmedEmail || undefined,
         area: formData.area.trim(),
         zone: formData.zone.trim() || undefined,
         street: formData.street.trim() || undefined,
         building: formData.building.trim() || undefined,
         deliveryNotes: formData.deliveryNotes.trim() || undefined,
         items: activeItems,
+        locale,
       });
 
       if (result.success && result.orderReference) {
         setIsSuccess(true);
-        if (isDirect) {
-          try {
+        try {
+          sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
+          if (isDirect) {
             sessionStorage.removeItem("direct_checkout_item");
-          } catch {}
+          }
+        } catch {}
+
+        if (isDirect) {
           router.push(`/order-success/${result.orderReference}?direct=1`);
         } else {
           router.push(`/order-success/${result.orderReference}`);
         }
       } else {
-        setErrorMessage(
-          result.error || "Unable to place order. Please check your details."
-        );
+        setErrorMessage(result.error || tCheckout("errors.orderFailed"));
         setIsSubmitting(false);
       }
     } catch {
-      setErrorMessage("Connection error. Please try again.");
+      setErrorMessage(tCheckout("errors.connectionError"));
       setIsSubmitting(false);
     }
   };
@@ -183,15 +254,18 @@ function CheckoutContent() {
     return (
       <div className="min-h-screen flex flex-col bg-neutral-50/60">
         <header className="bg-white border-b border-neutral-200">
-          <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
             <Logo size="md" />
+            <Suspense fallback={null}>
+              <LanguageSwitcher variant="subtle" />
+            </Suspense>
           </div>
         </header>
         <main className="flex-1 flex items-center justify-center p-4">
           <div className="text-center p-8">
             <Loader2 className="w-8 h-8 animate-spin text-[#8A1538] mx-auto mb-3" />
             <p className="text-xs font-semibold text-neutral-500">
-              {isSuccess ? "Redirecting to your order confirmation..." : "Preparing secure checkout..."}
+              {isSuccess ? tCheckout("redirectingToOrder") : tCheckout("preparingCheckout")}
             </p>
           </div>
         </main>
@@ -204,8 +278,11 @@ function CheckoutContent() {
     return (
       <div className="min-h-screen flex flex-col bg-neutral-50/60">
         <header className="bg-white border-b border-neutral-200">
-          <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
             <Logo size="md" />
+            <Suspense fallback={null}>
+              <LanguageSwitcher variant="subtle" />
+            </Suspense>
           </div>
         </header>
 
@@ -213,18 +290,16 @@ function CheckoutContent() {
           <div className="text-center max-w-md p-8 bg-white rounded-3xl border border-neutral-200 shadow-xs">
             <Banknote className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
             <h2 className="text-xl font-bold text-neutral-800">
-              {isDirect ? "No Direct Product Selected" : "Your Cart is Empty"}
+              {isDirect ? tCheckout("emptyDirectTitle") : tCheckout("emptyCartTitle")}
             </h2>
             <p className="text-xs text-neutral-500 mt-1 mb-6">
-              {isDirect
-                ? "Please choose a product to purchase with Cash on Delivery."
-                : "You cannot proceed to checkout with an empty cart."}
+              {isDirect ? tCheckout("emptyDirectDesc") : tCheckout("emptyCartDesc")}
             </p>
             <Link
               href="/"
               className="inline-flex px-6 py-3 rounded-xl bg-[#8A1538] text-white text-xs font-semibold hover:bg-[#700f2c]"
             >
-              Browse Deals Now
+              {tCheckout("browseDealsNow")}
             </Link>
           </div>
         </main>
@@ -236,30 +311,35 @@ function CheckoutContent() {
     <div className="min-h-screen flex flex-col bg-neutral-50/60">
       {/* Checkout Navbar */}
       <header className="bg-white border-b border-neutral-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-3 flex-wrap">
           <Logo size="md" />
-          <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full font-semibold">
-            <ShieldCheck className="w-4 h-4" />
-            <span>Secure Cash on Delivery Checkout</span>
+          <div className="flex items-center gap-3">
+            <Suspense fallback={null}>
+              <LanguageSwitcher variant="subtle" />
+            </Suspense>
+            <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full font-semibold">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>{tCheckout("secureBadge")}</span>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto px-4 py-8 md:py-12 w-full">
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column: Customer & Delivery Details */}
+        <form onSubmit={handleSubmit} noValidate className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Start Column: Customer & Delivery Details */}
           <div className="lg:col-span-7 space-y-6">
             {/* Customer Information Card */}
             <div className="bg-white rounded-3xl border border-neutral-200/90 p-6 shadow-xs space-y-4">
               <h2 className="text-base sm:text-lg font-black text-neutral-900 tracking-tight flex items-center gap-2">
-                <User className="w-5 h-5 text-[#8A1538]" />
-                Customer Information
+                <User className="w-5 h-5 text-[#8A1538] shrink-0" />
+                <span>{tCheckout("customerInfoTitle")}</span>
               </h2>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                    Full Name <span className="text-rose-600">*</span>
+                    {tCheckout("fullName")} <span className="text-rose-600">*</span>
                   </label>
                   <input
                     type="text"
@@ -268,7 +348,7 @@ function CheckoutContent() {
                     onChange={(e) =>
                       setFormData({ ...formData, customerName: e.target.value })
                     }
-                    placeholder="e.g. Mohammed Al-Kuwari"
+                    placeholder={tCheckout("fullNamePlaceholder")}
                     className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538] focus:ring-2 focus:ring-[#8A1538]/10"
                   />
                 </div>
@@ -276,13 +356,14 @@ function CheckoutContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                      Qatar Phone Number <span className="text-rose-600">*</span>
+                      {tCheckout("phone")} <span className="text-rose-600">*</span>
                     </label>
                     <div className="relative">
                       <input
                         type="tel"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        dir="ltr"
                         required
                         value={formData.customerPhone}
                         onChange={(e) =>
@@ -291,29 +372,30 @@ function CheckoutContent() {
                             customerPhone: e.target.value.replace(/\D/g, ""),
                           })
                         }
-                        placeholder="e.g. 55000000 or 33000000"
-                        className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538] focus:ring-2 focus:ring-[#8A1538]/10"
+                        placeholder={tCheckout("phonePlaceholder")}
+                        className="w-full ps-4 pe-10 py-3 rounded-xl border border-neutral-300 text-sm rtl:text-right focus:outline-none focus:border-[#8A1538] focus:ring-2 focus:ring-[#8A1538]/10"
                       />
-                      <Phone className="w-4 h-4 text-neutral-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                      <Phone className="w-4 h-4 text-neutral-400 absolute end-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                      Email Address <span className="text-rose-600">*</span>
+                      {tCheckout("email")} <span className="text-rose-600">*</span>
                     </label>
                     <div className="relative">
                       <input
                         type="email"
+                        dir="ltr"
                         required
                         value={formData.customerEmail}
                         onChange={(e) =>
                           setFormData({ ...formData, customerEmail: e.target.value })
                         }
-                        placeholder="receipt@example.com"
-                        className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538] focus:ring-2 focus:ring-[#8A1538]/10"
+                        placeholder={tCheckout("emailPlaceholder")}
+                        className="w-full ps-4 pe-10 py-3 rounded-xl border border-neutral-300 text-sm rtl:text-right focus:outline-none focus:border-[#8A1538] focus:ring-2 focus:ring-[#8A1538]/10"
                       />
-                      <Mail className="w-4 h-4 text-neutral-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                      <Mail className="w-4 h-4 text-neutral-400 absolute end-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
                 </div>
@@ -323,14 +405,14 @@ function CheckoutContent() {
             {/* Delivery Address Card (Qatar Standard) */}
             <div className="bg-white rounded-3xl border border-neutral-200/90 p-6 shadow-xs space-y-4">
               <h2 className="text-base sm:text-lg font-black text-neutral-900 tracking-tight flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-[#8A1538]" />
-                Delivery Address (Qatar)
+                <MapPin className="w-5 h-5 text-[#8A1538] shrink-0" />
+                <span>{tCheckout("deliveryDetails")}</span>
               </h2>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                    Municipality / Area <span className="text-rose-600">*</span>
+                    {tCheckout("area")} <span className="text-rose-600">*</span>
                   </label>
                   <select
                     value={formData.area}
@@ -339,9 +421,9 @@ function CheckoutContent() {
                     }
                     className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538] bg-white"
                   >
-                    {POPULAR_QATAR_AREAS.map((ar) => (
-                      <option key={ar} value={ar}>
-                        {ar}
+                    {QATAR_AREA_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {tCheckout(`areas.${opt.key}`)}
                       </option>
                     ))}
                   </select>
@@ -350,7 +432,7 @@ function CheckoutContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                      Zone No. <span className="text-rose-600">*</span>
+                      {tCheckout("zone")} <span className="text-rose-600">*</span>
                     </label>
                     <input
                       type="text"
@@ -359,14 +441,14 @@ function CheckoutContent() {
                       onChange={(e) =>
                         setFormData({ ...formData, zone: e.target.value })
                       }
-                      placeholder="e.g. Zone 24"
+                      placeholder={tCheckout("zonePlaceholder")}
                       className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538]"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                      Street / Road <span className="text-rose-600">*</span>
+                      {tCheckout("street")} <span className="text-rose-600">*</span>
                     </label>
                     <input
                       type="text"
@@ -375,14 +457,14 @@ function CheckoutContent() {
                       onChange={(e) =>
                         setFormData({ ...formData, street: e.target.value })
                       }
-                      placeholder="e.g. Suhaim Bin Hamad"
+                      placeholder={tCheckout("streetPlaceholder")}
                       className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538]"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                      Building / Villa No. <span className="text-rose-600">*</span>
+                      {tCheckout("building")} <span className="text-rose-600">*</span>
                     </label>
                     <input
                       type="text"
@@ -391,7 +473,7 @@ function CheckoutContent() {
                       onChange={(e) =>
                         setFormData({ ...formData, building: e.target.value })
                       }
-                      placeholder="e.g. Villa 12"
+                      placeholder={tCheckout("buildingPlaceholder")}
                       className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538]"
                     />
                   </div>
@@ -399,7 +481,10 @@ function CheckoutContent() {
 
                 <div>
                   <label className="block text-xs font-bold uppercase text-neutral-700 tracking-wider mb-1.5">
-                    Delivery Instructions / Landmark Notes <span className="text-neutral-400 font-normal lowercase">(optional)</span>
+                    {tCheckout("notes")}{" "}
+                    <span className="text-neutral-400 font-normal lowercase">
+                      {tCheckout("optional")}
+                    </span>
                   </label>
                   <textarea
                     rows={2}
@@ -407,7 +492,7 @@ function CheckoutContent() {
                     onChange={(e) =>
                       setFormData({ ...formData, deliveryNotes: e.target.value })
                     }
-                    placeholder="Near landmark, call before arrival, gate code, etc."
+                    placeholder={tCheckout("notesPlaceholder")}
                     className="w-full px-4 py-3 rounded-xl border border-neutral-300 text-sm focus:outline-none focus:border-[#8A1538]"
                   />
                 </div>
@@ -421,69 +506,103 @@ function CheckoutContent() {
               </div>
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-neutral-900">
-                  Cash on Delivery (COD)
+                  {tCheckout("codTitle")}
                 </h3>
                 <p className="text-xs text-neutral-600 leading-relaxed">
-                  Pay securely with cash or card upon receiving your package directly at your door in Qatar. No upfront online card payment required.
+                  {tCheckout("codDesc")}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Order Review & Submit */}
+          {/* End Column: Order Review & Submit */}
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-white rounded-3xl border border-neutral-200/90 p-6 shadow-xs space-y-5 lg:sticky lg:top-8">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <h2 className="text-lg font-black text-neutral-900 tracking-tight">
-                  Order Review ({activeItems.length} {activeItems.length === 1 ? "item" : "items"})
+                  {tCheckout("orderReviewCount", { count: activeItems.length })}
                 </h2>
                 {isDirect && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                     <Zap className="w-3 h-3 text-amber-600 fill-amber-600" />
-                    Direct Buy
+                    <span>{tCheckout("directBuy")}</span>
                   </span>
                 )}
               </div>
 
               {/* Items List */}
-              <div className="divide-y divide-neutral-100 max-h-64 overflow-y-auto pr-1">
-                {activeItems.map((it) => (
-                  <div
-                    key={`${it.productId}-${it.variantId || "default"}`}
-                    className="py-3 flex items-center justify-between text-xs"
-                  >
-                    <div className="flex-1 pr-2">
-                      <p className="font-bold text-neutral-800 line-clamp-1">
-                        {it.productName}
-                      </p>
-                      <p className="text-neutral-500 text-[11px]">
-                        {it.variantName ? `${it.variantName} × ` : ""}Qty: {it.quantity}
-                      </p>
+              <div className="divide-y divide-neutral-100 max-h-64 overflow-y-auto pe-1">
+                {activeItems.map((it) => {
+                  const displayName = resolveTextField(
+                    it.productName,
+                    it.productNameAr,
+                    locale
+                  ).value;
+                  const displayVariant = resolveTextField(
+                    it.variantName,
+                    it.variantNameAr,
+                    locale,
+                    { optional: true }
+                  ).resolvedValue;
+
+                  return (
+                    <div
+                      key={`${it.productId}-${it.variantId || "default"}`}
+                      className="py-3 flex items-center justify-between text-xs gap-2"
+                    >
+                      <div className="flex-1 pe-2 min-w-0">
+                        <p className="font-bold text-neutral-800 line-clamp-1">
+                          {displayName}
+                        </p>
+                        <p className="text-neutral-500 text-[11px]">
+                          {displayVariant ? `${displayVariant} × ` : ""}
+                          {tCheckout("qtyLabel", { count: it.quantity })}
+                        </p>
+                      </div>
+                      <span className="font-bold text-neutral-900 shrink-0 font-mono">
+                        {formatPrice(it.price * it.quantity, locale, currency)}
+                      </span>
                     </div>
-                    <span className="font-bold text-neutral-900 shrink-0 font-mono">
-                      QAR {(it.price * it.quantity).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Price Breakdown */}
               <div className="space-y-2.5 pt-3 border-t border-neutral-100 text-xs sm:text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">Subtotal</span>
-                  <span className="font-bold text-neutral-900 font-mono">QAR {subtotal.toLocaleString()}</span>
+                  <span className="text-neutral-500">{tCheckout("subtotal")}</span>
+                  <span className="font-bold text-neutral-900 font-mono">
+                    {formatPrice(subtotal, locale, currency)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-500">{tCheckout("deliveryFee")}</span>
+                  <span
+                    className={`font-bold font-mono ${
+                      deliveryFee === 0 ? "text-emerald-600" : "text-neutral-900"
+                    }`}
+                  >
+                    {deliveryFee === 0
+                      ? tCheckout("free")
+                      : formatPrice(deliveryFee, locale, currency)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-base sm:text-lg">
-                  <span className="font-bold text-neutral-900">Total Payable</span>
+                  <span className="font-bold text-neutral-900">
+                    {tCheckout("totalPayable")}
+                  </span>
                   <span className="font-black text-[#8A1538] font-mono">
-                    QAR {total.toLocaleString()}
+                    {formatPrice(total, locale, currency)}
                   </span>
                 </div>
               </div>
 
               {/* Error Message */}
               {errorMessage && (
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <div
+                  role="alert"
+                  className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2"
+                >
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{errorMessage}</span>
                 </div>
@@ -493,24 +612,24 @@ function CheckoutContent() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-4 px-6 rounded-2xl bg-[#8A1538] hover:bg-[#700f2c] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.99] disabled:opacity-50"
+                className="w-full py-4 px-6 rounded-2xl bg-[#8A1538] hover:bg-[#700f2c] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.99] disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Confirming Order...</span>
+                    <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                    <span>{tCheckout("placingOrder")}</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span>Confirm Cash on Delivery Order</span>
+                    <CheckCircle2 className="w-5 h-5 shrink-0" />
+                    <span>{tCheckout("placeOrder")}</span>
                   </>
                 )}
               </button>
 
               <div className="pt-2 text-center text-[11px] text-neutral-400 flex items-center justify-center gap-1.5">
-                <Truck className="w-3.5 h-3.5" />
-                <span>Delivered anywhere in Qatar within 24 to 48 hours</span>
+                <Truck className="w-3.5 h-3.5 shrink-0" />
+                <span>{tCheckout("deliveryEta")}</span>
               </div>
             </div>
           </div>
@@ -520,27 +639,30 @@ function CheckoutContent() {
   );
 }
 
+function CheckoutLoadingFallback() {
+  const tCheckout = useTranslations("checkout");
+  return (
+    <div className="min-h-screen flex flex-col bg-neutral-50/60">
+      <header className="bg-white border-b border-neutral-200">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <Logo size="md" />
+        </div>
+      </header>
+      <main className="flex-1 flex items-center justify-center p-4">
+        <div className="text-center p-8">
+          <Loader2 className="w-8 h-8 animate-spin text-[#8A1538] mx-auto mb-3" />
+          <p className="text-xs font-semibold text-neutral-500">
+            {tCheckout("preparingCheckout")}
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function CheckoutPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex flex-col bg-neutral-50/60">
-          <header className="bg-white border-b border-neutral-200">
-            <div className="max-w-7xl mx-auto px-4 py-4">
-              <Logo size="md" />
-            </div>
-          </header>
-          <main className="flex-1 flex items-center justify-center p-4">
-            <div className="text-center p-8">
-              <Loader2 className="w-8 h-8 animate-spin text-[#8A1538] mx-auto mb-3" />
-              <p className="text-xs font-semibold text-neutral-500">
-                Preparing secure checkout...
-              </p>
-            </div>
-          </main>
-        </div>
-      }
-    >
+    <Suspense fallback={<CheckoutLoadingFallback />}>
       <CheckoutContent />
     </Suspense>
   );
