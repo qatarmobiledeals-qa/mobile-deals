@@ -85,10 +85,12 @@ export function ProductDetailsClient({
     addItem(
       {
         productId: product.id,
-        productName: resolvedProduct.displayName,
+        productName: product.name,
+        productNameAr: product.name_ar ?? null,
         productSlug: product.slug,
         variantId: resolvedSelectedVariant?.id,
-        variantName: resolvedSelectedVariant?.displayName,
+        variantName: resolvedSelectedVariant?.name ?? null,
+        variantNameAr: resolvedSelectedVariant?.name_ar ?? null,
         price: currentPrice,
         imageUrl: primaryImage,
       },
@@ -102,10 +104,12 @@ export function ProductDetailsClient({
     if (isOutOfStock) return;
     const directItem = {
       productId: product.id,
-      productName: resolvedProduct.displayName,
+      productName: product.name,
+      productNameAr: product.name_ar ?? null,
       productSlug: product.slug,
       variantId: resolvedSelectedVariant?.id,
-      variantName: resolvedSelectedVariant?.displayName,
+      variantName: resolvedSelectedVariant?.name ?? null,
+      variantNameAr: resolvedSelectedVariant?.name_ar ?? null,
       price: currentPrice,
       imageUrl: primaryImage,
       quantity: quantity,
@@ -133,6 +137,7 @@ export function ProductDetailsClient({
         price: currentPrice,
         quantity: quantity,
         currency: currency,
+        locale: locale,
       });
 
   return (
