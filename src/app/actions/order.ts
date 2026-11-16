@@ -16,29 +16,53 @@ interface CreateOrderInput {
   building?: string;
   deliveryNotes?: string;
   items: CartItem[];
+  locale?: string;
 }
+
+const ORDER_ERROR_MESSAGES = {
+  en: {
+    nameRequired: "Please enter your full name.",
+    invalidPhone: "Please provide a valid Qatar mobile number.",
+    areaRequired: "Please specify your delivery area / district in Qatar.",
+    emptyItems: "Your order has no items selected.",
+    insertFailed:
+      "Unable to process order at this moment. Please try again or order directly on WhatsApp.",
+    unexpected: "An unexpected error occurred. Please contact support via WhatsApp.",
+  },
+  ar: {
+    nameRequired: "يرجى إدخال الاسم الكامل.",
+    invalidPhone: "يرجى إدخال رقم جوال قطري صالح.",
+    areaRequired: "يرجى تحديد منطقة التوصيل في قطر.",
+    emptyItems: "لم يتم اختيار أي منتجات في طلبك.",
+    insertFailed:
+      "تعذر إتمام الطلب في الوقت الحالي. يرجى المحاولة مرة أخرى أو الطلب مباشرة عبر واتساب.",
+    unexpected: "حدث خطأ غير متوقع. يرجى التواصل مع الدعم عبر واتساب.",
+  },
+} as const;
 
 export async function createCodOrder(data: CreateOrderInput): Promise<{
   success: boolean;
   orderReference?: string;
   error?: string;
 }> {
+  const errMsgs = data.locale === "ar" ? ORDER_ERROR_MESSAGES.ar : ORDER_ERROR_MESSAGES.en;
+
   try {
     // 1. Validate required fields
     if (!data.customerName || data.customerName.trim().length < 2) {
-      return { success: false, error: "Please enter your full name." };
+      return { success: false, error: errMsgs.nameRequired };
     }
 
     if (!data.customerPhone || data.customerPhone.trim().length < 6) {
-      return { success: false, error: "Please provide a valid Qatar mobile number." };
+      return { success: false, error: errMsgs.invalidPhone };
     }
 
     if (!data.area || data.area.trim().length < 2) {
-      return { success: false, error: "Please specify your delivery area / district in Qatar." };
+      return { success: false, error: errMsgs.areaRequired };
     }
 
     if (!data.items || data.items.length === 0) {
-      return { success: false, error: "Your order has no items selected." };
+      return { success: false, error: errMsgs.emptyItems };
     }
 
     // 2. Fetch site settings to get active Qatar fixed delivery charge
@@ -88,7 +112,7 @@ export async function createCodOrder(data: CreateOrderInput): Promise<{
       console.error("[OrderAction] Order insert failed:", orderError);
       return {
         success: false,
-        error: "Unable to process order at this moment. Please try again or order directly on WhatsApp.",
+        error: errMsgs.insertFailed,
       };
     }
 
@@ -171,7 +195,7 @@ export async function createCodOrder(data: CreateOrderInput): Promise<{
     console.error("[OrderAction] Unexpected error:", err);
     return {
       success: false,
-      error: "An unexpected error occurred. Please contact support via WhatsApp.",
+      error: errMsgs.unexpected,
     };
   }
 }

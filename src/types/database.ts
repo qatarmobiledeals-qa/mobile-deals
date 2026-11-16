@@ -199,9 +199,11 @@ export interface SiteSettings {
 export interface CartItem {
   productId: string;
   productName: string;
+  productNameAr?: string | null;
   productSlug: string;
   variantId?: string | null;
   variantName?: string | null;
+  variantNameAr?: string | null;
   price: number;
   quantity: number;
   imageUrl: string;

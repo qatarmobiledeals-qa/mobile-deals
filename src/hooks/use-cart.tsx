@@ -13,6 +13,8 @@ interface CartContextType {
   subtotal: number;
   deliveryFee: number;
   total: number;
+  whatsappNumber: string;
+  currency: string;
   isHydrated: boolean;
 }
 
@@ -24,22 +26,31 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [whatsappNumber, setWhatsappNumber] = useState<string>("+97455000000");
+  const [currency, setCurrency] = useState<string>("QAR");
 
   // Load from localStorage on mount only (client-safe, avoids hydration mismatch)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(CART_STORAGE_KEY);
-      if (stored) {
-        setItems(JSON.parse(stored));
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const stored = localStorage.getItem(CART_STORAGE_KEY);
+        if (stored) {
+          setItems(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.warn("Could not load cart from localStorage", e);
+      } finally {
+        setIsHydrated(true);
       }
-    } catch (e) {
-      console.warn("Could not load cart from localStorage", e);
-    } finally {
-      setIsHydrated(true);
-    }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Fetch active site settings (including shipping charge)
+  // Fetch active site settings (including shipping charge, WhatsApp number, currency)
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -48,6 +59,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           const data = await res.json();
           if (typeof data.shipping_charge === "number" && data.shipping_charge >= 0) {
             setDeliveryFee(data.shipping_charge);
+          }
+          if (typeof data.whatsapp_number === "string" && data.whatsapp_number.trim()) {
+            setWhatsappNumber(data.whatsapp_number.trim());
+          }
+          if (typeof data.currency === "string" && data.currency.trim()) {
+            setCurrency(data.currency.trim());
           }
         }
       } catch (err) {
@@ -132,6 +149,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         subtotal,
         deliveryFee,
         total,
+        whatsappNumber,
+        currency,
         isHydrated,
       }}
     >
