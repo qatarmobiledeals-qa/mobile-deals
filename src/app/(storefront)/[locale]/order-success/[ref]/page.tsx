@@ -242,20 +242,14 @@ export default async function OrderSuccessPage({ params }: OrderSuccessPageProps
                 <span>{tSuccess("subtotal")}</span>
                 <span className="font-mono">{formatPrice(order.subtotal, locale, currency)}</span>
               </div>
-              <div className="flex justify-between text-neutral-600">
-                <span>{tSuccess("qatarDelivery")}</span>
-                <span
-                  className={`font-semibold ${
-                    Number(order.delivery_fee) === 0
-                      ? "text-emerald-600"
-                      : "text-neutral-900 font-mono"
-                  }`}
-                >
-                  {Number(order.delivery_fee) === 0
-                    ? tSuccess("free")
-                    : formatPrice(Number(order.delivery_fee), locale, currency)}
-                </span>
-              </div>
+              {Number(order.delivery_fee) > 0 && (
+                <div className="flex justify-between text-neutral-600">
+                  <span>{tSuccess("qatarDelivery")}</span>
+                  <span className="text-neutral-900 font-mono font-semibold">
+                    {formatPrice(Number(order.delivery_fee), locale, currency)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between text-base font-black text-[#8A1538] pt-2 border-t border-neutral-100">
                 <span>{tSuccess("totalDueCod")}</span>
                 <span className="font-mono">{formatPrice(order.total, locale, currency)}</span>

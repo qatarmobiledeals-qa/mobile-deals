@@ -250,18 +250,14 @@ export default function CartPage() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between pt-3">
-                  <span className="text-neutral-500">{tCart("deliveryFee")}</span>
-                  <span
-                    className={`font-bold font-mono ${
-                      deliveryFee === 0 ? "text-emerald-600" : "text-neutral-900"
-                    }`}
-                  >
-                    {deliveryFee === 0
-                      ? tCart("free")
-                      : formatPrice(deliveryFee, locale, currency)}
-                  </span>
-                </div>
+                {deliveryFee > 0 && (
+                  <div className="flex items-center justify-between pt-3">
+                    <span className="text-neutral-500">{tCart("deliveryFee")}</span>
+                    <span className="font-bold font-mono text-neutral-900">
+                      {formatPrice(deliveryFee, locale, currency)}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between pt-3 text-base sm:text-lg">
                   <span className="font-bold text-neutral-900">{tCart("total")}</span>

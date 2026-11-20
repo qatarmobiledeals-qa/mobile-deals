@@ -575,18 +575,14 @@ function CheckoutContent() {
                     {formatPrice(subtotal, locale, currency)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">{tCheckout("deliveryFee")}</span>
-                  <span
-                    className={`font-bold font-mono ${
-                      deliveryFee === 0 ? "text-emerald-600" : "text-neutral-900"
-                    }`}
-                  >
-                    {deliveryFee === 0
-                      ? tCheckout("free")
-                      : formatPrice(deliveryFee, locale, currency)}
-                  </span>
-                </div>
+                {deliveryFee > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-500">{tCheckout("deliveryFee")}</span>
+                    <span className="font-bold font-mono text-neutral-900">
+                      {formatPrice(deliveryFee, locale, currency)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-base sm:text-lg">
                   <span className="font-bold text-neutral-900">
                     {tCheckout("totalPayable")}
