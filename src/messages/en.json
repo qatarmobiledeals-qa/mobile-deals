@@ -387,6 +387,7 @@
     "locationPermissionDenied": "Location access was denied. You can still order, or enable location in your browser.",
     "locationUnavailable": "Unable to detect GPS position. Please check your device location settings.",
     "locationNotSupported": "Geolocation is not supported by your browser.",
+    "locationOutsideQatar": "Detected location is outside Qatar ({distance} km). Mobile Deals only delivers within Qatar.",
     "errors": {
       "noDirectProduct": "No product selected for direct checkout.",
       "emptyCart": "Your cart is empty. Please add products first.",

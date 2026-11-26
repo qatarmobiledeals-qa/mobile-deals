@@ -49,7 +49,12 @@ interface LocationState {
   distanceKm: number | null;
   deliveryFee: number | null;
   coords: { latitude: number; longitude: number } | null;
-  errorMessageKey: "locationPermissionDenied" | "locationUnavailable" | "locationNotSupported" | null;
+  errorMessageKey:
+    | "locationPermissionDenied"
+    | "locationUnavailable"
+    | "locationNotSupported"
+    | "locationOutsideQatar"
+    | null;
 }
 
 const QATAR_AREA_OPTIONS = [
@@ -162,6 +167,18 @@ function CheckoutContent() {
         const { latitude, longitude } = position.coords;
         const distance = calculateDistanceKm(STORE_LAT, STORE_LNG, latitude, longitude);
         const roundedDistance = Math.round(distance * 10) / 10;
+
+        if (distance > 120) {
+          setLocationState({
+            status: "error",
+            distanceKm: roundedDistance,
+            deliveryFee: null,
+            coords: null,
+            errorMessageKey: "locationOutsideQatar",
+          });
+          return;
+        }
+
         let fee = 0;
         if (distance > 15) {
           fee = Math.ceil(distance - 15) * 1;
@@ -676,7 +693,11 @@ function CheckoutContent() {
                   <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>
-                      {locationState.errorMessageKey === "locationPermissionDenied"
+                      {locationState.errorMessageKey === "locationOutsideQatar"
+                        ? tCheckout("locationOutsideQatar", {
+                            distance: locationState.distanceKm ?? 0,
+                          })
+                        : locationState.errorMessageKey === "locationPermissionDenied"
                         ? tCheckout("locationPermissionDenied")
                         : locationState.errorMessageKey === "locationNotSupported"
                         ? tCheckout("locationNotSupported")

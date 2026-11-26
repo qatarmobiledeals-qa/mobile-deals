@@ -94,6 +94,16 @@ export async function createCodOrder(data: CreateOrderInput): Promise<{
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       const distanceKm = R * c;
 
+      if (distanceKm > 120) {
+        return {
+          success: false,
+          error:
+            data.locale === "ar"
+              ? "الموقع المحدد يقع خارج دولة قطر. التوصيل متاح فقط داخل دولة قطر."
+              : "Detected location is outside Qatar. Delivery is only available within Qatar.",
+        };
+      }
+
       if (distanceKm <= 15) {
         deliveryFee = 0;
       } else {
