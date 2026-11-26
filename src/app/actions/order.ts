@@ -17,6 +17,9 @@ interface CreateOrderInput {
   deliveryNotes?: string;
   items: CartItem[];
   locale?: string;
+  deliveryFee?: number;
+  customerLat?: number;
+  customerLng?: number;
 }
 
 const ORDER_ERROR_MESSAGES = {
@@ -65,12 +68,49 @@ export async function createCodOrder(data: CreateOrderInput): Promise<{
       return { success: false, error: errMsgs.emptyItems };
     }
 
-    // 2. Fetch site settings to get active Qatar fixed delivery charge
-    const settings = await getSiteSettings();
-    const deliveryFee =
-      typeof settings.shipping_charge === "number" && settings.shipping_charge >= 0
-        ? settings.shipping_charge
-        : 0;
+    // 2. Calculate distance-based delivery fee (Free <= 15km, 1 QAR/km beyond 15km from Duhail shop)
+    const STORE_LAT = 25.35706;
+    const STORE_LNG = 51.474236;
+
+    let deliveryFee = 0;
+    let locationNote = "";
+
+    if (
+      typeof data.customerLat === "number" &&
+      typeof data.customerLng === "number" &&
+      !isNaN(data.customerLat) &&
+      !isNaN(data.customerLng)
+    ) {
+      // Haversine distance in km
+      const R = 6371;
+      const dLat = ((data.customerLat - STORE_LAT) * Math.PI) / 180;
+      const dLon = ((data.customerLng - STORE_LNG) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((STORE_LAT * Math.PI) / 180) *
+          Math.cos((data.customerLat * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distanceKm = R * c;
+
+      if (distanceKm <= 15) {
+        deliveryFee = 0;
+      } else {
+        const extraKm = Math.ceil(distanceKm - 15);
+        deliveryFee = extraKm * 1;
+      }
+
+      locationNote = `📍 GPS: https://maps.google.com/?q=${data.customerLat},${data.customerLng} (~${distanceKm.toFixed(1)} km from Duhail shop)`;
+    } else if (typeof data.deliveryFee === "number" && data.deliveryFee >= 0) {
+      deliveryFee = data.deliveryFee;
+    } else {
+      const settings = await getSiteSettings();
+      deliveryFee =
+        typeof settings.shipping_charge === "number" && settings.shipping_charge >= 0
+          ? settings.shipping_charge
+          : 0;
+    }
 
     // 3. Calculate subtotal and final total
     const subtotal = data.items.reduce(
@@ -83,6 +123,10 @@ export async function createCodOrder(data: CreateOrderInput): Promise<{
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
     const orderReference = `MD-${dateStr}-${randomHex}`;
+
+    const mergedDeliveryNotes = [data.deliveryNotes?.trim(), locationNote]
+      .filter(Boolean)
+      .join("\n");
 
     const supabase = createAdminClient();
 
@@ -98,7 +142,7 @@ export async function createCodOrder(data: CreateOrderInput): Promise<{
         zone: data.zone?.trim() || null,
         street: data.street?.trim() || null,
         building: data.building?.trim() || null,
-        delivery_notes: data.deliveryNotes?.trim() || null,
+        delivery_notes: mergedDeliveryNotes || null,
         subtotal: subtotal,
         delivery_fee: deliveryFee,
         total: total,

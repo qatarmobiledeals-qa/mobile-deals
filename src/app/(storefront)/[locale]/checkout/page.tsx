@@ -23,7 +23,34 @@ import {
   User,
   Mail,
   Zap,
+  Navigation,
+  LocateFixed,
 } from "lucide-react";
+
+const STORE_LAT = 25.35706;
+const STORE_LNG = 51.474236;
+
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+interface LocationState {
+  status: "idle" | "detecting" | "success" | "error";
+  distanceKm: number | null;
+  deliveryFee: number | null;
+  coords: { latitude: number; longitude: number } | null;
+  errorMessageKey: "locationPermissionDenied" | "locationUnavailable" | "locationNotSupported" | null;
+}
 
 const QATAR_AREA_OPTIONS = [
   { value: "Doha - Al Sadd", key: "dohaAlSadd" },
@@ -108,11 +135,75 @@ function CheckoutContent() {
   const activeItems: CartItem[] = isDirect ? directItems : cartItems;
   const isReady = isDirect ? directLoaded : isHydrated;
 
+  const [locationState, setLocationState] = useState<LocationState>({
+    status: "idle",
+    distanceKm: null,
+    deliveryFee: null,
+    coords: null,
+    errorMessageKey: null,
+  });
+
+  const handleDetectLocation = () => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      setLocationState({
+        status: "error",
+        distanceKm: null,
+        deliveryFee: null,
+        coords: null,
+        errorMessageKey: "locationNotSupported",
+      });
+      return;
+    }
+
+    setLocationState((prev) => ({ ...prev, status: "detecting", errorMessageKey: null }));
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const distance = calculateDistanceKm(STORE_LAT, STORE_LNG, latitude, longitude);
+        const roundedDistance = Math.round(distance * 10) / 10;
+        let fee = 0;
+        if (distance > 15) {
+          fee = Math.ceil(distance - 15) * 1;
+        }
+        setLocationState({
+          status: "success",
+          distanceKm: roundedDistance,
+          deliveryFee: fee,
+          coords: { latitude, longitude },
+          errorMessageKey: null,
+        });
+      },
+      (error) => {
+        let key: "locationPermissionDenied" | "locationUnavailable" = "locationUnavailable";
+        if (error.code === error.PERMISSION_DENIED) {
+          key = "locationPermissionDenied";
+        }
+        setLocationState({
+          status: "error",
+          distanceKm: null,
+          deliveryFee: null,
+          coords: null,
+          errorMessageKey: key,
+        });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  };
+
   const subtotal = activeItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
-  const total = subtotal + deliveryFee;
+  const activeDeliveryFee =
+    locationState.status === "success" && locationState.deliveryFee !== null
+      ? locationState.deliveryFee
+      : deliveryFee;
+  const total = subtotal + activeDeliveryFee;
 
   const [formData, setFormData] = useState<CheckoutFormData>(DEFAULT_FORM_DATA);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -223,6 +314,9 @@ function CheckoutContent() {
         deliveryNotes: formData.deliveryNotes.trim() || undefined,
         items: activeItems,
         locale,
+        deliveryFee: activeDeliveryFee,
+        customerLat: locationState.coords?.latitude,
+        customerLng: locationState.coords?.longitude,
       });
 
       if (result.success && result.orderReference) {
@@ -499,6 +593,108 @@ function CheckoutContent() {
               </div>
             </div>
 
+            {/* Delivery Availability & Location Fee Card */}
+            <div className="bg-white rounded-3xl border border-neutral-200/90 p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-black text-neutral-900 tracking-tight flex items-center gap-2">
+                  <LocateFixed className="w-5 h-5 text-[#8A1538] shrink-0" />
+                  <span>{tCheckout("locationDeliveryTitle")}</span>
+                </h2>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-neutral-100 text-neutral-700">
+                  <MapPin className="w-3 h-3 text-[#8A1538]" />
+                  <span>{tCheckout("locationDeliveryStoreTag")}</span>
+                </span>
+              </div>
+
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                {tCheckout("locationDeliveryDesc")}
+              </p>
+
+              {locationState.status === "idle" && (
+                <button
+                  type="button"
+                  onClick={handleDetectLocation}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  <Navigation className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{tCheckout("btnDetectLocation")}</span>
+                </button>
+              )}
+
+              {locationState.status === "detecting" && (
+                <div className="inline-flex items-center gap-2.5 px-5 py-3 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-semibold">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#8A1538] shrink-0" />
+                  <span>{tCheckout("btnDetectingLocation")}</span>
+                </div>
+              )}
+
+              {locationState.status === "success" && (
+                <div className="space-y-3">
+                  {locationState.deliveryFee === 0 ? (
+                    <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-start gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5 flex-1">
+                        <p className="text-xs sm:text-sm font-bold">
+                          {tCheckout("locationFreeWithinRange")}
+                        </p>
+                        <p className="text-[11px] text-emerald-700">
+                          {locationState.distanceKm} km — {tCheckout("locationGpsAttached")}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-3">
+                      <Truck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5 flex-1">
+                        <p className="text-xs sm:text-sm font-bold">
+                          {tCheckout("locationFeeBeyondRange", {
+                            distance: locationState.distanceKm ?? 0,
+                            extraKm: Math.ceil((locationState.distanceKm ?? 15) - 15),
+                            fee: formatPrice(locationState.deliveryFee ?? 0, locale, currency),
+                          })}
+                        </p>
+                        <p className="text-[11px] text-amber-800">
+                          {tCheckout("locationGpsAttached")}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleDetectLocation}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-neutral-900 cursor-pointer underline-offset-4 hover:underline"
+                  >
+                    <LocateFixed className="w-3.5 h-3.5" />
+                    <span>{tCheckout("btnRecheckLocation")}</span>
+                  </button>
+                </div>
+              )}
+
+              {locationState.status === "error" && (
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      {locationState.errorMessageKey === "locationPermissionDenied"
+                        ? tCheckout("locationPermissionDenied")
+                        : locationState.errorMessageKey === "locationNotSupported"
+                        ? tCheckout("locationNotSupported")
+                        : tCheckout("locationUnavailable")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDetectLocation}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Navigation className="w-3.5 h-3.5 shrink-0" />
+                    <span>{tCheckout("btnDetectLocation")}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Payment Method Info */}
             <div className="p-5 rounded-2xl bg-[#8A1538]/5 border border-[#8A1538]/20 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-[#8A1538] text-white flex items-center justify-center shrink-0">
@@ -575,14 +771,21 @@ function CheckoutContent() {
                     {formatPrice(subtotal, locale, currency)}
                   </span>
                 </div>
-                {deliveryFee > 0 && (
+                {activeDeliveryFee > 0 ? (
                   <div className="flex items-center justify-between">
                     <span className="text-neutral-500">{tCheckout("deliveryFee")}</span>
                     <span className="font-bold font-mono text-neutral-900">
-                      {formatPrice(deliveryFee, locale, currency)}
+                      {formatPrice(activeDeliveryFee, locale, currency)}
                     </span>
                   </div>
-                )}
+                ) : locationState.status === "success" ? (
+                  <div className="flex items-center justify-between text-emerald-700">
+                    <span className="text-neutral-500">{tCheckout("deliveryFee")}</span>
+                    <span className="font-bold font-mono text-emerald-700">
+                      {formatPrice(0, locale, currency)}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-base sm:text-lg">
                   <span className="font-bold text-neutral-900">
                     {tCheckout("totalPayable")}
